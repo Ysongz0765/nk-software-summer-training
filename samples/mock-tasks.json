@@ -1,0 +1,35 @@
+[
+  {
+    "id": "task-1",
+    "title": "完成数据库表设计",
+    "description": "整理用户、文件、模板、报表与导出记录表。",
+    "status": "completed",
+    "progress": 100,
+    "confidence": 0.96,
+    "source": "mock",
+    "user_confirmed": true,
+    "evidence_file_ids": []
+  },
+  {
+    "id": "task-2",
+    "title": "完成后端健康检查接口",
+    "description": "提供统一的健康检查 API。",
+    "status": "in_progress",
+    "progress": 70,
+    "confidence": 0.93,
+    "source": "mock",
+    "user_confirmed": false,
+    "evidence_file_ids": []
+  },
+  {
+    "id": "task-3",
+    "title": "整理项目需求文档",
+    "description": "补齐 README、架构和接口说明。",
+    "status": "pending",
+    "progress": 20,
+    "confidence": 0.88,
+    "source": "mock",
+    "user_confirmed": false,
+    "evidence_file_ids": []
+  }
+]
