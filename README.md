@@ -80,7 +80,7 @@ docker compose up --build
 - Nginx 入口：`http://localhost:8080`
 - 后端直连：`http://localhost:8000`
 - 前端直连：`http://localhost:5173`
-- MySQL：`localhost:3306`
+- MySQL：`localhost:3307`
 
 ## 本地 MySQL 配置
 
@@ -104,7 +104,7 @@ DATABASE_URL=mysql+pymysql://reportflow:change_me@localhost:3306/reportflow?char
 ## DBeaver 连接 MySQL
 
 - Host：`localhost`
-- Port：`3306`
+- Port：`3307`（Docker Compose 暴露端口；本机直接安装 MySQL 时通常为 `3306`）
 - Database：`reportflow`
 - Username：`reportflow`
 - Password：读取本地 `.env` 中的 `MYSQL_PASSWORD`

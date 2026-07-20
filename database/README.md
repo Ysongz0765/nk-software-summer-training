@@ -7,6 +7,7 @@
 - 数据库名：`reportflow`
 - 字符集：`utf8mb4`
 - 排序规则：`utf8mb4_unicode_ci`
+- Docker Compose 宿主机访问端口：`3307`（容器内仍为 `3306`）
 - 图形化管理工具建议：DBeaver Community
 
 ## 导出数据库结构
@@ -14,7 +15,7 @@
 ```bash
 mysqldump \
   -h 127.0.0.1 \
-  -P 3306 \
+  -P 3307 \
   -u reportflow \
   -p \
   --no-data \
@@ -27,7 +28,7 @@ mysqldump \
 ```bash
 mysqldump \
   -h 127.0.0.1 \
-  -P 3306 \
+  -P 3307 \
   -u reportflow \
   -p \
   --no-create-info \
@@ -40,7 +41,7 @@ mysqldump \
 ```bash
 mysqldump \
   -h 127.0.0.1 \
-  -P 3306 \
+  -P 3307 \
   -u reportflow \
   -p \
   --default-character-set=utf8mb4 \
