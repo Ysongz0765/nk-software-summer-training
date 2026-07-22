@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api.v1.router import api_router
 from app.core.config import get_settings
@@ -28,6 +31,9 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(api_router, prefix=settings.api_v1_prefix)
+    storage_root = Path(settings.storage_root)
+    storage_root.mkdir(parents=True, exist_ok=True)
+    app.mount("/storage", StaticFiles(directory=storage_root), name="storage")
     register_exception_handlers(app)
     return app
 

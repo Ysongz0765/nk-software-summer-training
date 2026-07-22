@@ -4,10 +4,10 @@ from fastapi import APIRouter
 
 from app.schemas.common import ApiResponse
 from app.schemas.report import TemplateParseResult
-from app.services.template.mock import MockTemplateService
+from app.services.template.docx import DocxTemplateService
 
 router = APIRouter()
-template_service = MockTemplateService()
+template_service = DocxTemplateService()
 
 
 @router.post("", response_model=ApiResponse[dict[str, object]])
