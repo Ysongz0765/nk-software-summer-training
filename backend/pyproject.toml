@@ -10,9 +10,12 @@ requires-python = ">=3.11"
 dependencies = [
   "alembic>=1.13.0",
   "fastapi>=0.111.0",
+  "docxtpl",
+  "openpyxl",
   "passlib[bcrypt]>=1.7.4",
   "pydantic>=2.7.0",
   "pydantic-settings>=2.2.1",
+  "python-docx",
   "python-jose[cryptography]>=3.3.0",
   "python-multipart>=0.0.9",
   "pymysql>=1.1.1",
