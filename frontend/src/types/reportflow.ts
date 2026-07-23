@@ -72,3 +72,68 @@ export interface HealthStatus {
   service: string;
   version: string;
 }
+
+export interface FileUploadResult {
+  file_id: string;
+  original_name: string;
+  stored_name: string;
+}
+
+export interface OCRResult {
+  text: string;
+  pages: number;
+  confidence: number;
+  language: string;
+}
+
+export interface MissingInformationResult {
+  missing_fields: string[];
+  questions: string[];
+  confidence: number;
+}
+
+export interface TaskExtractionRequest {
+  source_text: string;
+  report_type: string;
+  context?: Record<string, unknown>;
+}
+
+export interface ReportGenerationRequest {
+  report_type: string;
+  title: string;
+  report_date: string;
+  tasks: TaskItem[];
+  template_id?: number | null;
+  style?: string;
+  source_data?: Record<string, unknown>;
+}
+
+export interface ExportResult {
+  export_type: string;
+  file_path: string;
+  status: string;
+  download_url?: string | null;
+}
+
+export interface ReportVersion {
+  report_id: number;
+  version_number: number;
+  content?: ReportContent | Record<string, unknown>;
+  change_note?: string | null;
+}
+
+export interface ReportSummary {
+  id?: number;
+  report_type: string;
+  title: string;
+  report_date: string;
+  status: string;
+  task_count: number;
+}
+
+export interface TemplateParseResult {
+  template_type: string;
+  fields: string[];
+  description: string;
+  raw_content: Record<string, unknown>;
+}
