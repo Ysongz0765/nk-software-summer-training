@@ -18,7 +18,10 @@ from app.schemas.report import (
     ReportSummary,
     ReportUpdate,
 )
+from app.services.export.base import ExportService
+from app.services.export.excel import ExcelExportService
 from app.services.export.mock import MockExportService
+from app.services.export.pdf import PdfExportService
 from app.services.export.template_word import TemplateWordExportService
 from app.services.export.word import WordExportService
 
@@ -26,6 +29,8 @@ router = APIRouter()
 mock_export_service = MockExportService()
 word_export_service = WordExportService()
 template_word_export_service = TemplateWordExportService()
+excel_export_service = ExcelExportService()
+pdf_export_service = PdfExportService()
 
 
 @router.post("", response_model=ApiResponse[dict[str, object]])
@@ -138,11 +143,19 @@ async def export_report(
             template_path,
         )
     else:
-        export_service = (
-            word_export_service if export_type in {"docx", "word"} else mock_export_service
-        )
+        export_service = _get_export_service(export_type)
         result = await export_service.export(report, export_type)
     return ApiResponse(data=result)
+
+
+def _get_export_service(export_type: str) -> ExportService:
+    if export_type in {"docx", "word"}:
+        return word_export_service
+    if export_type in {"xlsx", "excel"}:
+        return excel_export_service
+    if export_type == "pdf":
+        return pdf_export_service
+    return mock_export_service
 
 
 def _build_initial_report_content(payload: ReportCreate) -> ReportContent:
