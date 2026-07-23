@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from reportlab.lib import colors
@@ -10,7 +11,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.core.config import get_settings
 from app.schemas.report import ExportResult, ReportContent, TaskItem
@@ -23,6 +24,11 @@ FONT_CANDIDATES = (
     Path("C:/Windows/Fonts/simsun.ttc"),
 )
 PAGE_MARGIN = 18 * mm
+ACCENT_COLOR = colors.HexColor("#1F4E79")
+BORDER_COLOR = colors.HexColor("#CBD5E1")
+HEADER_FILL = colors.HexColor("#D9EAF7")
+TEXT_COLOR = colors.HexColor("#111827")
+MUTED_TEXT_COLOR = colors.HexColor("#6B7280")
 
 
 class PdfExportService(ExportService):
@@ -60,7 +66,11 @@ def _write_pdf(file_path: Path, report: ReportContent) -> None:
         bottomMargin=PAGE_MARGIN,
         title=report.title,
     )
-    document.build(_build_story(report, styles))
+    document.build(
+        _build_story(report, styles),
+        onFirstPage=lambda canvas, doc: _draw_footer(canvas, doc, font_name),
+        onLaterPages=lambda canvas, doc: _draw_footer(canvas, doc, font_name),
+    )
 
 
 def _register_chinese_font() -> str:
@@ -86,7 +96,7 @@ def _build_styles(font_name: str) -> dict[str, ParagraphStyle]:
             fontName=font_name,
             fontSize=20,
             leading=28,
-            textColor=colors.HexColor("#111827"),
+            textColor=TEXT_COLOR,
             spaceAfter=10,
         ),
         "meta": ParagraphStyle(
@@ -103,7 +113,7 @@ def _build_styles(font_name: str) -> dict[str, ParagraphStyle]:
             fontName=font_name,
             fontSize=13,
             leading=20,
-            textColor=colors.HexColor("#111827"),
+            textColor=ACCENT_COLOR,
             spaceBefore=12,
             spaceAfter=6,
         ),
@@ -115,6 +125,23 @@ def _build_styles(font_name: str) -> dict[str, ParagraphStyle]:
             leading=18,
             firstLineIndent=0,
             spaceAfter=4,
+        ),
+        "table_header": ParagraphStyle(
+            "ReportTableHeader",
+            parent=base_styles["BodyText"],
+            fontName=font_name,
+            fontSize=9.5,
+            leading=13,
+            textColor=TEXT_COLOR,
+            alignment=1,
+        ),
+        "table_cell": ParagraphStyle(
+            "ReportTableCell",
+            parent=base_styles["BodyText"],
+            fontName=font_name,
+            fontSize=9,
+            leading=13,
+            textColor=TEXT_COLOR,
         ),
     }
 
@@ -128,8 +155,8 @@ def _build_story(report: ReportContent, styles: dict[str, ParagraphStyle]) -> li
     ]
 
     _append_section(story, "一、工作总结", [report.summary], styles)
-    _append_section(story, "二、已完成任务", _format_tasks(report.completed_tasks), styles)
-    _append_section(story, "三、进行中任务", _format_tasks(report.in_progress_tasks), styles)
+    _append_task_section(story, "二、已完成任务", report.completed_tasks, styles)
+    _append_task_section(story, "三、进行中任务", report.in_progress_tasks, styles)
     _append_section(story, "四、问题与风险", _format_list(report.problems), styles)
     _append_section(story, "五、解决方案", _format_list(report.solutions), styles)
     _append_section(story, "六、下一步计划", _format_list(report.next_plan), styles)
@@ -145,17 +172,77 @@ def _append_section(
     story.append(Paragraph(_escape(title), styles["heading"]))
     for line in lines:
         story.append(Paragraph(_escape(line), styles["body"]))
+    story.append(Spacer(1, 4))
 
 
-def _format_tasks(tasks: list[TaskItem]) -> list[str]:
-    if not tasks:
-        return ["暂无"]
-    return [
-        f"{index}. {task.title}"
-        f"{f'：{task.description}' if task.description else ''}"
-        f"（进度 {task.progress}%）"
-        for index, task in enumerate(tasks, start=1)
+def _append_task_section(
+    story: list[object],
+    title: str,
+    tasks: list[TaskItem],
+    styles: dict[str, ParagraphStyle],
+) -> None:
+    story.append(Paragraph(_escape(title), styles["heading"]))
+    story.append(_build_task_table(tasks, styles))
+    story.append(Spacer(1, 8))
+
+
+def _build_task_table(tasks: list[TaskItem], styles: dict[str, ParagraphStyle]) -> Table:
+    data: list[list[object]] = [
+        [
+            Paragraph("序号", styles["table_header"]),
+            Paragraph("任务", styles["table_header"]),
+            Paragraph("描述", styles["table_header"]),
+            Paragraph("状态", styles["table_header"]),
+            Paragraph("进度", styles["table_header"]),
+        ]
     ]
+
+    if not tasks:
+        data.append(
+            [
+                "1",
+                Paragraph("暂无", styles["table_cell"]),
+                Paragraph("", styles["table_cell"]),
+                "",
+                "",
+            ]
+        )
+    else:
+        for index, task in enumerate(tasks, start=1):
+            data.append(
+                [
+                    str(index),
+                    Paragraph(_escape(task.title), styles["table_cell"]),
+                    Paragraph(_escape(task.description or ""), styles["table_cell"]),
+                    _status_label(task.status),
+                    f"{task.progress}%",
+                ]
+            )
+
+    table = Table(
+        data,
+        colWidths=[12 * mm, 42 * mm, 70 * mm, 24 * mm, 20 * mm],
+        repeatRows=1,
+        hAlign="LEFT",
+    )
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), HEADER_FILL),
+                ("TEXTCOLOR", (0, 0), (-1, 0), TEXT_COLOR),
+                ("FONTNAME", (0, 0), (-1, -1), FONT_NAME),
+                ("GRID", (0, 0), (-1, -1), 0.5, BORDER_COLOR),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("ALIGN", (0, 1), (0, -1), "CENTER"),
+                ("ALIGN", (3, 1), (4, -1), "CENTER"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ]
+        )
+    )
+    return table
 
 
 def _format_list(items: list[str]) -> list[str]:
@@ -167,6 +254,25 @@ def _format_list(items: list[str]) -> list[str]:
 def _report_type_label(report_type: str) -> str:
     labels = {"daily": "日报", "weekly": "周报"}
     return labels.get(report_type, report_type)
+
+
+def _status_label(status: str) -> str:
+    labels = {
+        "pending": "待处理",
+        "in_progress": "进行中",
+        "completed": "已完成",
+    }
+    return labels.get(status, status)
+
+
+def _draw_footer(canvas: Any, document: Any, font_name: str) -> None:
+    canvas.saveState()
+    canvas.setStrokeColor(BORDER_COLOR)
+    canvas.line(PAGE_MARGIN, 13 * mm, A4[0] - PAGE_MARGIN, 13 * mm)
+    canvas.setFont(font_name, 8)
+    canvas.setFillColor(MUTED_TEXT_COLOR)
+    canvas.drawRightString(A4[0] - PAGE_MARGIN, 8 * mm, f"第 {document.page} 页")
+    canvas.restoreState()
 
 
 def _escape(text: str) -> str:
