@@ -41,6 +41,12 @@ class AIServiceUnavailableError(AppError):
     message = "ai service unavailable"
 
 
+class OCRServiceUnavailableError(AppError):
+    code = 50302
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    message = "ocr service unavailable"
+
+
 class ExportFailedError(AppError):
     code = 50002
     status_code = status.HTTP_500_INTERNAL_SERVER_ERROR

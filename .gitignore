@@ -27,10 +27,11 @@ pnpm-debug.log*
 !.env.example
 
 # Runtime storage
-storage/uploads/*
-storage/templates/*
-storage/exports/*
-storage/temp/*
+**/storage/*
+# storage/uploads/*
+# storage/templates/*
+# storage/exports/*
+# storage/temp/*
 !storage/**/.gitkeep
 
 # IDE and OS

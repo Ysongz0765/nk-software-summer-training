@@ -26,10 +26,12 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = Field(default=1440, alias="ACCESS_TOKEN_EXPIRE_MINUTES")
 
     storage_root: str = Field(default="./storage", alias="STORAGE_ROOT")
+    ocr_provider: str = Field(default="mock", alias="OCR_PROVIDER")
     ai_provider: str = Field(default="mock", alias="AI_PROVIDER")
     ai_api_key: str | None = Field(default=None, alias="AI_API_KEY")
     ai_base_url: str | None = Field(default=None, alias="AI_BASE_URL")
     ai_model: str = Field(default="mock-reportflow", alias="AI_MODEL")
+    ai_timeout_seconds: float = Field(default=60.0, alias="AI_TIMEOUT_SECONDS")
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"],
         alias="CORS_ORIGINS",

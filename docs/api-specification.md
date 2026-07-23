@@ -38,6 +38,15 @@
 ## OCR 模块
 
 - `POST /api/v1/ocr/recognize`
+- `POST /api/v1/ocr/recognize-upload`
+- `POST /api/v1/ocr/recognize-batch`
+- `POST /api/v1/ocr/extract-tasks`
+- `POST /api/v1/ocr/extract-tasks-upload`
+
+`recognize-upload` 接收 multipart 图片或 PDF 文件并立即返回 OCR 结果；当前真实 PaddleOCR
+provider 支持 `.png`、`.jpg`、`.jpeg`、`.pdf`。PDF 会先按页渲染成临时图片再识别。
+`extract-tasks` 和 `extract-tasks-upload` 会先执行 OCR，再把识别文本交给 AI 模块提取
+`TaskItem`。
 
 ## AI 模块
 

@@ -52,6 +52,12 @@ Copy-Item ..\.env.example ..\.env
 .\.venv\Scripts\python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+如果需要启用本地 PaddleOCR 图片和 PDF 识别，后端依赖安装改为：
+
+```powershell
+.\.venv\Scripts\python -m pip install -e ".[dev,ocr]"
+```
+
 访问：
 
 - 健康检查：`http://localhost:8000/api/v1/health`
@@ -128,6 +134,37 @@ Alembic 负责表结构迁移，不负责把旧 PostgreSQL 业务数据自动复
 
 导出表结构和演示数据命令见 [database/README.md](database/README.md)。这些命令需要数据库密码，不会在仓库脚本中自动执行。
 
+## 真实 AI/OCR 配置
+
+默认仍使用 Mock 服务，便于没有密钥和 OCR 模型的环境启动：
+
+```env
+AI_PROVIDER=mock
+OCR_PROVIDER=mock
+```
+
+接入 DeepSeek 和 PaddleOCR 图片识别时，在本地 `.env` 中配置：
+
+```env
+AI_PROVIDER=deepseek
+AI_API_KEY=sk-placeholder
+AI_BASE_URL=https://api.deepseek.com
+AI_MODEL=deepseek-v4-flash
+AI_TIMEOUT_SECONDS=60
+
+OCR_PROVIDER=paddle
+```
+
+`AI_API_KEY` 只填写在本地 `.env`，不要提交真实密钥。当前 PaddleOCR 接入支持 `.png`、`.jpg`、`.jpeg` 图片和 `.pdf` 文件；PDF 会先按页渲染成临时图片再识别。
+
+OCR 联调可使用：
+
+- `POST /api/v1/ocr/recognize`：传已上传文件名或路径，返回 OCR 文本。
+- `POST /api/v1/ocr/recognize-upload`：直接上传图片并识别。
+- `POST /api/v1/ocr/recognize-batch`：批量识别多个已上传文件。
+- `POST /api/v1/ocr/extract-tasks`：OCR 后直接调用 AI 提取任务。
+- `POST /api/v1/ocr/extract-tasks-upload`：上传文件后直接 OCR 并提取任务。
+
 ## 测试方法
 
 后端测试默认使用 SQLite 内存数据库：
@@ -157,6 +194,7 @@ npm run lint
 - 后端 FastAPI 可启动，提供统一 `/api/v1` 路由。
 - `GET /api/v1/health` 可返回服务状态。
 - 预留文件、OCR、AI、模板、报表和导出 API，并提供 Mock 返回。
+- AI 服务已支持 DeepSeek provider，OCR 服务已支持 PaddleOCR 图片识别 provider 和 OCR+AI 联调接口。
 - SQLAlchemy 模型、Pydantic Schema、Alembic 配置已创建。
 - MySQL 8.4 + PyMySQL 配置已完成，SQLite 测试仍可运行。
 - 前端 Vue 骨架、路由、Pinia、Axios、Element Plus 已配置。
@@ -164,7 +202,7 @@ npm run lint
 
 ## 当前未完成功能
 
-- 未接入真实 OCR、大模型、Word/Excel/PDF 导出。
+- 未完成生产级 OCR 错误恢复、复杂版面还原和完整 Word/Excel/PDF 导出。
 - 未实现完整认证、权限和真实用户体系。
 - 未实现在线富文本编辑器完整体验。
 - 未实现生产级文件存储、病毒扫描和审计日志。
