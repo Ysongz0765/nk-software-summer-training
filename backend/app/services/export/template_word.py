@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import cast
 from uuid import uuid4
 from xml.etree import ElementTree
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -105,7 +106,7 @@ def _replace_placeholders_in_xml(xml_content: bytes, replacements: dict[str, str
 
     if not changed:
         return xml_content
-    return ElementTree.tostring(root, encoding="utf-8", xml_declaration=True)
+    return cast(bytes, ElementTree.tostring(root, encoding="utf-8", xml_declaration=True))
 
 
 def _build_replacements(report: ReportContent) -> dict[str, str]:
