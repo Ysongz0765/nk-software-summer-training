@@ -33,8 +33,8 @@ function update(i: number, p: Partial<TaskItem>) {
 
 <template>
   <div class="te">
-    <div class="te-hd" v-if="title">
-      <span class="te-title">{{ title }}</span>
+    <div class="te-hd" :class="{ 'te-hd-end': !title }">
+      <span v-if="title" class="te-title">{{ title }}</span>
       <el-button size="small" type="primary" text :icon="Plus" @click="add">添加</el-button>
     </div>
     <div v-if="!tasks.length" class="te-empty muted">暂无，点击添加</div>
@@ -90,6 +90,9 @@ function update(i: number, p: Partial<TaskItem>) {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+.te-hd-end {
+  justify-content: flex-end;
 }
 .te-title {
   font-weight: 600;

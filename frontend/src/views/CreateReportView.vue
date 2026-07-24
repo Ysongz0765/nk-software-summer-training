@@ -41,6 +41,7 @@ const ocrText = computed(() => ocrTexts.value.join('\n'));
 const ocrLoading = ref(false);
 const manualText = ref('');
 const sourceText = computed(() => [ocrText.value, manualText.value].filter(Boolean).join('\n'));
+const hasSourceMaterial = computed(() => Boolean(sourceText.value.trim() || uploadedFiles.value.length));
 
 const tasks = ref<TaskItem[]>([]);
 const extracting = ref(false);
@@ -180,6 +181,11 @@ async function handleTemplateUpload(file: File) {
 
 function onUploaded(file: FileUploadResult) {
   uploadedFiles.value = [...uploadedFiles.value, file];
+}
+
+function onUploadCleared() {
+  uploadedFiles.value = [];
+  ocrTexts.value = [];
 }
 
 function onOCRResult(result: OCRResult) {
@@ -326,6 +332,7 @@ async function saveAndEdit() {
       <el-card shadow="never">
         <FileUploader
           @uploaded="onUploaded"
+          @cleared="onUploadCleared"
           @ocr-result="onOCRResult"
           @ocr-loading="onOCRLoading"
         />
@@ -338,7 +345,7 @@ async function saveAndEdit() {
           :disabled="ocrLoading"
         />
         <div class="step-actions end">
-          <el-button type="primary" :icon="ArrowRight" :disabled="!sourceText" @click="step = 1">
+          <el-button type="primary" :icon="ArrowRight" :disabled="!hasSourceMaterial" @click="step = 1">
             下一步
           </el-button>
         </div>

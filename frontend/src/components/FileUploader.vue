@@ -9,6 +9,7 @@ import type { ApiResponse, FileUploadResult, OCRResult } from '@/types/reportflo
 
 const emit = defineEmits<{
   (e: 'uploaded', result: FileUploadResult): void;
+  (e: 'cleared'): void;
   (e: 'ocr-result', result: OCRResult): void;
   (e: 'ocr-loading', loading: boolean): void;
   (e: 'all-uploaded', results: FileUploadResult[]): void;
@@ -88,15 +89,21 @@ async function doOCR(fileId: string) {
   }
 }
 
+function resetUploadedState() {
+  uploadedResults.value = [];
+  uploadProgress.value = { current: 0, total: 0 };
+  emit('cleared');
+}
+
 function handleRemove(_file: UploadUserFile, fileListAfter: UploadUserFile[]) {
   // 同步清理：element-plus 的 on-remove 回调拿到的是删除后的列表
   fileList.value = fileListAfter;
+  resetUploadedState();
 }
 
 function clearFiles() {
   fileList.value = [];
-  uploadedResults.value = [];
-  uploadProgress.value = { current: 0, total: 0 };
+  resetUploadedState();
 }
 
 const uploadDisabled = computed(() => !fileList.value.length || uploading.value);
