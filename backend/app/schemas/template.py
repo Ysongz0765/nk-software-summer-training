@@ -24,3 +24,16 @@ class TemplateRead(BaseModel):
     field_config: dict[str, object] = Field(default_factory=dict)
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+class TemplatePreview(BaseModel):
+    id: int
+    name: str
+    template_type: str
+    source: str
+    preview_mode: str = "text"
+    fields: list[str] = Field(default_factory=list)
+    raw_placeholders: list[str] = Field(default_factory=list)
+    body: str
+    html: str | None = None
+    description: str | None = None

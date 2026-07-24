@@ -11,6 +11,12 @@ from app.schemas.report import (
     TaskItem,
 )
 from app.services.ai.base import AIReportService
+from app.services.template.context import (
+    STANDARD_TEMPLATE_FIELDS,
+    custom_field_name,
+    get_source_value,
+)
+from app.services.template.render import render_template_text
 
 DEFAULT_TASK_LINES = (
     "完成数据库表设计",
@@ -28,9 +34,15 @@ class MockAIReportService(AIReportService):
             for index, candidate in enumerate(candidates[:MAX_MOCK_TASKS], start=1)
         ]
 
-    async def check_missing_information(self, tasks: list[TaskItem]) -> MissingInformationResult:
+    async def check_missing_information(
+        self,
+        tasks: list[TaskItem],
+        template_fields: list[str] | None = None,
+        source_data: dict[str, object] | None = None,
+    ) -> MissingInformationResult:
         missing: list[str] = []
         questions: list[str] = []
+        source = source_data or {}
 
         if not tasks:
             missing.append("tasks")
@@ -48,6 +60,9 @@ class MockAIReportService(AIReportService):
             missing.append("next_plan")
             questions.append("请补充下一阶段计划。")
 
+        for field in template_fields or []:
+            _append_template_missing_field(field, source, missing, questions)
+
         return MissingInformationResult(
             missing_fields=missing,
             questions=questions,
@@ -57,7 +72,11 @@ class MockAIReportService(AIReportService):
     async def generate_report(self, request: ReportGenerationRequest) -> ReportContent:
         completed = [task for task in request.tasks if task.status == "completed"]
         active = [task for task in request.tasks if task.status != "completed"]
-        missing_result = await self.check_missing_information(request.tasks)
+        missing_result = await self.check_missing_information(
+            request.tasks,
+            request.template_fields,
+            request.source_data,
+        )
         problems = _string_list_from_source(request.source_data, "problems")
         solutions = _string_list_from_source(request.source_data, "solutions")
         next_plan = _string_list_from_source(request.source_data, "next_plan")
@@ -79,7 +98,8 @@ class MockAIReportService(AIReportService):
                 "沉淀本期成果并准备下一期计划。"
             ]
 
-        return ReportContent(
+        custom_fields = _build_template_custom_fields(request)
+        report = ReportContent(
             report_type=request.report_type,
             title=request.title,
             date=request.report_date,
@@ -93,6 +113,7 @@ class MockAIReportService(AIReportService):
             solutions=solutions,
             next_plan=next_plan,
             custom_fields={
+                **custom_fields,
                 "template_id": request.template_id,
                 "style": request.style,
                 "generated_by": "MockAIReportService",
@@ -100,6 +121,10 @@ class MockAIReportService(AIReportService):
             missing_fields=missing_result.missing_fields,
             style=request.style,
         )
+        rendered_template = _render_template_body(request, report)
+        if rendered_template:
+            report.custom_fields["rendered_template"] = rendered_template
+        return report
 
 
 def _extract_task_candidates(source_text: str) -> list[str]:
@@ -166,9 +191,82 @@ def _confidence_for_status(status: str) -> float:
 
 
 def _string_list_from_source(source_data: dict[str, object], key: str) -> list[str]:
-    value = source_data.get(key)
+    value = get_source_value(source_data, key)
     if isinstance(value, str) and value.strip():
         return [value.strip()]
     if isinstance(value, list):
         return [item.strip() for item in value if isinstance(item, str) and item.strip()]
     return []
+
+
+def _append_template_missing_field(
+    field: str,
+    source_data: dict[str, object],
+    missing: list[str],
+    questions: list[str],
+) -> None:
+    normalized = field.strip()
+    if not normalized:
+        return
+    if normalized in {"title", "date", "report_type", "summary"}:
+        return
+    if normalized in {"completed_tasks", "in_progress_tasks"}:
+        return
+    if normalized in missing:
+        return
+    if get_source_value(source_data, normalized) is not None:
+        return
+
+    custom_name = custom_field_name(normalized)
+    if custom_name is not None:
+        missing.append(normalized)
+        questions.append(f"Please provide a value for template field '{custom_name}'.")
+        return
+
+    if normalized in {"problems", "solutions", "next_plan"}:
+        missing.append(normalized)
+        questions.append(f"Please provide content for template field '{normalized}'.")
+
+
+def _build_template_custom_fields(request: ReportGenerationRequest) -> dict[str, object]:
+    custom_fields: dict[str, object] = {}
+    for field in request.template_fields:
+        custom_name = custom_field_name(field)
+        if custom_name is None:
+            continue
+        value = get_source_value(request.source_data, field)
+        if value is None:
+            value = get_source_value(request.source_data, custom_name)
+        custom_fields[custom_name] = value if value is not None else _fallback_custom_field_value(
+            custom_name,
+        )
+
+    template_context = request.source_data.get("template")
+    if isinstance(template_context, dict):
+        custom_fields.setdefault("template_name", str(template_context.get("name", "")))
+        fields = template_context.get("fields")
+        if isinstance(fields, list):
+            custom_fields.setdefault(
+                "template_fields",
+                ", ".join(field for field in fields if isinstance(field, str)),
+            )
+    return custom_fields
+
+
+def _fallback_custom_field_value(field: str) -> str:
+    if field in STANDARD_TEMPLATE_FIELDS:
+        return ""
+    return "TBD"
+
+
+def _render_template_body(
+    request: ReportGenerationRequest,
+    report: ReportContent,
+) -> str | None:
+    template_context = request.source_data.get("template")
+    if not isinstance(template_context, dict):
+        return None
+    render_text = template_context.get("render_text")
+    if not isinstance(render_text, str) or not render_text.strip():
+        return None
+    return render_template_text(render_text, report)

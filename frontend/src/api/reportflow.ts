@@ -5,6 +5,7 @@ import type {
   ExportResult,
   FileUploadResult,
   HealthStatus,
+  MissingInformationRequest,
   MissingInformationResult,
   OCRResult,
   Report,
@@ -16,6 +17,7 @@ import type {
   TaskItem,
   Template,
   TemplateParseResult,
+  TemplatePreview,
   User,
 } from '@/types/reportflow';
 
@@ -51,7 +53,7 @@ export async function uploadFile(file: File): Promise<ApiResponse<FileUploadResu
   fd.append('file', file);
   const response = await http.post<ApiResponse<FileUploadResult>>('/files/upload', fd, {
     headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 30000,
+    timeout: 60000,
   });
   return response.data;
 }
@@ -78,11 +80,11 @@ export async function extractTasks(
 }
 
 export async function checkMissingInfo(
-  tasks: TaskItem[],
+  payload: TaskItem[] | MissingInformationRequest,
 ): Promise<ApiResponse<MissingInformationResult>> {
   const response = await http.post<ApiResponse<MissingInformationResult>>(
     '/ai/check-missing',
-    tasks,
+    payload,
   );
   return response.data;
 }
@@ -148,10 +150,12 @@ export async function exportReport(
   reportId: number,
   exportType: string,
   templatePath?: string,
+  templateId?: number | null,
 ): Promise<ApiResponse<ExportResult>> {
   const response = await http.post<ApiResponse<ExportResult>>(`/reports/${reportId}/export`, {
     export_type: exportType,
     template_path: templatePath || null,
+    template_id: templateId || null,
   });
   return response.data;
 }
@@ -166,6 +170,11 @@ export async function getTemplate(templateId: number): Promise<ApiResponse<Templ
   return response.data;
 }
 
+export async function previewTemplate(templateId: number): Promise<ApiResponse<TemplatePreview>> {
+  const response = await http.get<ApiResponse<TemplatePreview>>(`/templates/${templateId}/preview`);
+  return response.data;
+}
+
 export async function createTemplate(payload: {
   name: string;
   description?: string | null;
@@ -174,7 +183,9 @@ export async function createTemplate(payload: {
   file_id?: number | null;
   field_config?: Record<string, unknown>;
 }): Promise<ApiResponse<Template>> {
-  const response = await http.post<ApiResponse<Template>>('/templates', payload);
+  const response = await http.post<ApiResponse<Template>>('/templates', payload, {
+    timeout: 60000,
+  });
   return response.data;
 }
 

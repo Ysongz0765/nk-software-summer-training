@@ -10,8 +10,8 @@ from zipfile import ZIP_DEFLATED, ZipFile
 from app.core.config import get_settings
 from app.schemas.report import ExportResult, ReportContent, TaskItem
 from app.services.export.base import ExportService
+from app.services.template.render import PLACEHOLDER_PATTERN, build_replacements
 
-PLACEHOLDER_PATTERN = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_.]*)\s*\}\}")
 WORD_NAMESPACE = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 XML_NAMESPACE = "http://www.w3.org/XML/1998/namespace"
 
@@ -50,7 +50,7 @@ class TemplateWordExportService(ExportService):
         safe_title = re.sub(r"[^A-Za-z0-9._\-\u4e00-\u9fff]+", "_", report.title).strip("_")
         target_path = export_dir / f"{safe_title or 'report'}-template-{uuid4().hex[:8]}.docx"
 
-        replacements = _build_replacements(report)
+        replacements = build_replacements(report)
         _render_docx_template(source_template, target_path, replacements)
 
         return ExportResult(
@@ -123,7 +123,9 @@ def _build_replacements(report: ReportContent) -> dict[str, str]:
         "style": report.style,
     }
     for key, value in report.custom_fields.items():
-        replacements[f"custom_fields.{key}"] = str(value)
+        rendered_value = _format_custom_value(value)
+        replacements.setdefault(key, rendered_value)
+        replacements[f"custom_fields.{key}"] = rendered_value
     return replacements
 
 
@@ -142,6 +144,14 @@ def _format_list(items: list[str]) -> str:
     if not items:
         return "暂无"
     return "\n".join(f"{index}. {item}" for index, item in enumerate(items, start=1))
+
+
+def _format_custom_value(value: object) -> str:
+    if isinstance(value, list):
+        return "\n".join(str(item) for item in value)
+    if isinstance(value, dict):
+        return "\n".join(f"{key}: {item}" for key, item in value.items())
+    return str(value)
 
 
 def _report_type_label(report_type: str) -> str:

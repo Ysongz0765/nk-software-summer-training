@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ArrowLeft, Check, Download, Edit, View } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import {
@@ -44,6 +44,10 @@ const versions = ref<ReportVersion[]>([]);
 const problemsText = ref('');
 const solutionsText = ref('');
 const nextPlanText = ref('');
+const renderedTemplate = computed(() => {
+  const value = report.value.custom_fields?.rendered_template;
+  return typeof value === 'string' && value.trim() ? value : '';
+});
 
 onMounted(async () => {
   await loadReport();
@@ -196,6 +200,11 @@ async function handleExport(type: string) {
     </div>
 
     <div v-show="editMode === 'form'" class="editor-form">
+      <el-card v-if="renderedTemplate" shadow="never" class="editor-section template-body">
+        <template #header><strong>按模板生成正文</strong></template>
+        <p>{{ renderedTemplate }}</p>
+      </el-card>
+
       <el-card shadow="never" class="editor-section">
         <el-row :gutter="16">
           <el-col :span="8">
@@ -303,6 +312,12 @@ async function handleExport(type: string) {
 
 .editor-section {
   margin-bottom: 12px;
+}
+
+.template-body p {
+  margin: 0;
+  line-height: 1.8;
+  white-space: pre-line;
 }
 
 .field-label {

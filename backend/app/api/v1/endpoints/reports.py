@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
@@ -25,13 +26,21 @@ from app.services.export.base import ExportService
 from app.services.export.excel import ExcelExportService
 from app.services.export.mock import MockExportService
 from app.services.export.pdf import PdfExportService
+from app.services.export.template_excel import TemplateExcelExportService
 from app.services.export.template_word import TemplateWordExportService
 from app.services.export.word import WordExportService
+from app.services.template.context import (
+    load_template_context,
+    template_file_path,
+    template_render_text,
+)
+from app.services.template.render import render_template_text
 
 router = APIRouter()
 mock_export_service = MockExportService()
 word_export_service = WordExportService()
 template_word_export_service = TemplateWordExportService()
+template_excel_export_service = TemplateExcelExportService()
 excel_export_service = ExcelExportService()
 pdf_export_service = PdfExportService()
 
@@ -44,6 +53,13 @@ async def create_report(
 ) -> ApiResponse[ReportRead]:
     repository = ReportRepository(db)
     content = _build_initial_report_content(payload)
+    template_context = load_template_context(
+        db,
+        payload.template_id,
+        current_user.id if current_user else None,
+    )
+    if template_context and template_context.render_text:
+        content = _content_with_rendered_text(content, template_context.render_text)
     report = repository.create(
         Report(
             user_id=current_user.id if current_user else None,
@@ -103,16 +119,17 @@ async def update_report(
     if payload.source_data is not None:
         report.source_data = payload.source_data
     if payload.content is not None:
-        report.content = payload.content.model_dump(mode="json")
-        report.report_type = payload.content.report_type
+        content = _content_with_rendered_template(payload.content, report)
+        report.content = content.model_dump(mode="json")
+        report.report_type = content.report_type
         report.title = payload.title or payload.content.title
-        report.report_date = payload.content.date
+        report.report_date = content.date
 
     report = repository.save(report)
     if payload.content is not None:
         repository.create_version(
             report_id=report.id,
-            content=payload.content.model_dump(mode="json"),
+            content=_report_content(report).model_dump(mode="json"),
             change_note="saved from editor",
         )
     return ApiResponse(data=_report_read(report))
@@ -177,11 +194,18 @@ async def export_report(
     report = _load_report(report_id, db)
     _ensure_report_access(report, current_user)
     export_type = str(payload.get("export_type", "json")).lower()
-    template_path = payload.get("template_path")
+    template_path = _template_path_for_export(report, payload, db, current_user)
+    template_suffix = Path(template_path).suffix.lower() if template_path else ""
     report_content = _report_content(report)
 
-    if export_type in {"docx", "word"} and isinstance(template_path, str) and template_path:
+    if export_type in {"docx", "word"} and template_path and template_suffix == ".docx":
         result = await template_word_export_service.export_with_template(
+            report_content,
+            export_type,
+            template_path,
+        )
+    elif export_type in {"xlsx", "excel"} and template_path and template_suffix == ".xlsx":
+        result = await template_excel_export_service.export_with_template(
             report_content,
             export_type,
             template_path,
@@ -207,6 +231,34 @@ def _get_export_service(export_type: str) -> ExportService:
     if export_type == "pdf":
         return pdf_export_service
     return mock_export_service
+
+
+def _template_path_for_export(
+    report: Report,
+    payload: dict[str, object],
+    db: Session,
+    current_user: User | None,
+) -> str | None:
+    explicit_template_path = payload.get("template_path")
+    if isinstance(explicit_template_path, str) and explicit_template_path:
+        return explicit_template_path
+
+    template_id = _payload_template_id(payload) or report.template_id
+    template_context = load_template_context(
+        db,
+        template_id,
+        current_user.id if current_user else None,
+    )
+    return template_context.file_path if template_context else None
+
+
+def _payload_template_id(payload: dict[str, object]) -> int | None:
+    raw_template_id = payload.get("template_id")
+    if isinstance(raw_template_id, int):
+        return raw_template_id
+    if isinstance(raw_template_id, str) and raw_template_id.isdigit():
+        return int(raw_template_id)
+    return None
 
 
 def _build_initial_report_content(payload: ReportCreate) -> ReportContent:
@@ -242,13 +294,32 @@ def _ensure_report_access(report: Report, user: User | None) -> None:
         raise PermissionDeniedError()
 
 
-def _report_content(report: Report) -> ReportContent:
+def _report_content(report: Report, render_template: bool = True) -> ReportContent:
     content = dict(report.content or {})
     content.setdefault("report_type", report.report_type)
     content.setdefault("title", report.title)
     content.setdefault("date", report.report_date)
     content.setdefault("summary", "")
-    return ReportContent.model_validate(content)
+    report_content = ReportContent.model_validate(content)
+    if not render_template:
+        return report_content
+    return _content_with_rendered_template(report_content, report)
+
+
+def _content_with_rendered_template(content: ReportContent, report: Report) -> ReportContent:
+    if report.template is None:
+        return content
+    file_path = template_file_path(report.template)
+    template_text = template_render_text(report.template.field_config or {}, file_path)
+    if not template_text:
+        return content
+    return _content_with_rendered_text(content, template_text)
+
+
+def _content_with_rendered_text(content: ReportContent, template_text: str) -> ReportContent:
+    custom_fields = dict(content.custom_fields)
+    custom_fields["rendered_template"] = render_template_text(template_text, content)
+    return content.model_copy(update={"custom_fields": custom_fields})
 
 
 def _report_read(report: Report) -> ReportRead:
@@ -266,7 +337,7 @@ def _report_read(report: Report) -> ReportRead:
 
 
 def _report_summary(report: Report) -> ReportSummary:
-    content = _report_content(report)
+    content = _report_content(report, render_template=False)
     return ReportSummary(
         id=report.id,
         report_type=report.report_type,

@@ -15,8 +15,15 @@ from app.models.template import Template
 from app.models.user import User
 from app.schemas.common import ApiResponse
 from app.schemas.report import TemplateParseResult
-from app.schemas.template import TemplateCreate, TemplateRead
+from app.schemas.template import TemplateCreate, TemplatePreview, TemplateRead
+from app.services.template.context import (
+    template_fields,
+    template_file_path,
+    template_render_text,
+)
 from app.services.template.docx import DocxTemplateService
+from app.services.template.render import extract_raw_placeholders
+from app.services.template.source_preview import build_source_preview_html
 
 router = APIRouter()
 template_service = DocxTemplateService()
@@ -31,7 +38,9 @@ async def create_template(
     file_record = _resolve_file_record(payload, db)
     field_config = dict(payload.field_config)
 
-    if file_record is not None and file_record.stored_name.lower().endswith(".docx"):
+    if file_record is not None and file_record.stored_name.lower().endswith(
+        (".docx", ".xlsx", ".pdf")
+    ):
         parse_result = await _parse_template_path(file_record.stored_name)
         field_config.setdefault("fields", parse_result.fields)
         field_config.setdefault("parse", parse_result.model_dump(mode="json"))
@@ -72,6 +81,20 @@ async def get_template(
     if template is None:
         raise ResourceNotFoundError()
     return ApiResponse(data=_template_read(template))
+
+
+@router.get("/{template_id}/preview", response_model=ApiResponse[TemplatePreview])
+async def preview_template(
+    template_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User | None, Depends(get_optional_current_user)],
+) -> ApiResponse[TemplatePreview]:
+    template = db.get(Template, template_id)
+    if template is None:
+        raise ResourceNotFoundError()
+    if current_user is not None and template.user_id not in {None, current_user.id}:
+        raise ResourceNotFoundError()
+    return ApiResponse(data=_template_preview(template))
 
 
 @router.delete(
@@ -209,3 +232,70 @@ def _template_read(template: Template) -> TemplateRead:
         created_at=template.created_at,
         updated_at=template.updated_at,
     )
+
+
+def _template_preview(template: Template) -> TemplatePreview:
+    field_config = template.field_config or {}
+    fields = template_fields(field_config)
+    file_path = template_file_path(template)
+    body = template_render_text(field_config, file_path)
+    source = _preview_source(field_config, file_path)
+    source_html = build_source_preview_html(file_path)
+
+    if not body:
+        body = _default_preview_body(template.template_type, fields)
+        if source_html is None:
+            source = "default"
+
+    return TemplatePreview(
+        id=template.id,
+        name=template.name,
+        template_type=template.template_type,
+        source=source,
+        preview_mode="source" if source_html else "text",
+        fields=fields,
+        raw_placeholders=extract_raw_placeholders(body),
+        body=body,
+        html=source_html,
+        description=template.description,
+    )
+
+
+def _preview_source(field_config: dict[str, object], file_path: str | None) -> str:
+    parse_data = field_config.get("parse")
+    if isinstance(parse_data, dict):
+        raw_content = parse_data.get("raw_content")
+        if isinstance(raw_content, dict):
+            source = raw_content.get("source")
+            if isinstance(source, str) and source:
+                return source
+    if file_path:
+        return Path(file_path).suffix.lower().removeprefix(".") or "file"
+    return "default"
+
+
+def _default_preview_body(template_type: str, fields: list[str]) -> str:
+    if template_type == "weekly":
+        title = "{{title}}\n日期：{{date}}\n一、本周总结\n{{summary}}"
+        tail = "\n二、本周完成\n{{completed_tasks}}\n三、下周计划\n{{next_plan}}"
+    else:
+        title = "{{title}}\n日期：{{date}}\n一、今日总结\n{{summary}}"
+        tail = "\n二、今日完成\n{{completed_tasks}}\n三、明日计划\n{{next_plan}}"
+
+    extra_fields = [
+        field
+        for field in fields
+        if field
+        not in {
+            "title",
+            "date",
+            "summary",
+            "completed_tasks",
+            "in_progress_tasks",
+            "problems",
+            "solutions",
+            "next_plan",
+        }
+    ]
+    extras = "".join(f"\n{field}：{{{{{field}}}}}" for field in extra_fields)
+    return f"{title}{tail}{extras}"

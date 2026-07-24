@@ -70,6 +70,19 @@ export interface Template {
   updated_at?: string | null;
 }
 
+export interface TemplatePreview {
+  id: number;
+  name: string;
+  template_type: string;
+  source: string;
+  preview_mode: string;
+  fields: string[];
+  raw_placeholders: string[];
+  body: string;
+  html?: string | null;
+  description?: string | null;
+}
+
 export interface UploadedFile {
   id: number | string;
   user_id?: number | null;
@@ -112,6 +125,13 @@ export interface MissingInformationResult {
   confidence: number;
 }
 
+export interface MissingInformationRequest {
+  tasks: TaskItem[];
+  template_id?: number | null;
+  template_fields?: string[];
+  source_data?: Record<string, unknown>;
+}
+
 export interface TaskExtractionRequest {
   source_text: string;
   report_type: string;
@@ -124,6 +144,7 @@ export interface ReportGenerationRequest {
   report_date: string;
   tasks: TaskItem[];
   template_id?: number | null;
+  template_fields?: string[];
   style?: string;
   source_data?: Record<string, unknown>;
 }

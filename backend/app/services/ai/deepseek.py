@@ -15,6 +15,8 @@ from app.schemas.report import (
     TaskItem,
 )
 from app.services.ai.base import AIReportService
+from app.services.template.context import custom_field_name, get_source_value
+from app.services.template.render import render_template_text
 
 DEEPSEEK_DEFAULT_BASE_URL = "https://api.deepseek.com"
 DEEPSEEK_DEFAULT_MODEL = "deepseek-v4-flash"
@@ -58,11 +60,20 @@ class DeepSeekAIReportService(AIReportService):
 
         return [task.model_copy(update={"source": "ai"}) for task in tasks]
 
-    async def check_missing_information(self, tasks: list[TaskItem]) -> MissingInformationResult:
+    async def check_missing_information(
+        self,
+        tasks: list[TaskItem],
+        template_fields: list[str] | None = None,
+        source_data: dict[str, object] | None = None,
+    ) -> MissingInformationResult:
         payload = await self._chat_json(
             system_prompt=_MISSING_INFORMATION_SYSTEM_PROMPT,
             user_prompt=json.dumps(
-                {"tasks": [task.model_dump(mode="json") for task in tasks]},
+                {
+                    "tasks": [task.model_dump(mode="json") for task in tasks],
+                    "template_fields": template_fields or [],
+                    "source_data": source_data or {},
+                },
                 ensure_ascii=False,
             ),
         )
@@ -93,17 +104,23 @@ class DeepSeekAIReportService(AIReportService):
                 "DeepSeek report response failed schema validation"
             ) from exc
 
-        return report.model_copy(
+        custom_fields = _template_custom_fields(request, report.custom_fields)
+        rendered_report = report.model_copy(
             update={
                 "report_type": request.report_type,
                 "date": request.report_date,
                 "custom_fields": {
-                    **report.custom_fields,
+                    **custom_fields,
+                    "template_id": request.template_id,
                     "generated_by": "DeepSeekAIReportService",
                     "model": self._model,
                 },
             }
         )
+        rendered_template = _render_template_body(request, rendered_report)
+        if rendered_template:
+            rendered_report.custom_fields["rendered_template"] = rendered_template
+        return rendered_report
 
     async def _chat_json(self, system_prompt: str, user_prompt: str) -> JsonObject:
         request_payload: JsonObject = {
@@ -183,6 +200,35 @@ def _loads_json_object(content: str) -> JsonObject:
         raise AIServiceUnavailableError("DeepSeek content must be a JSON object")
 
     return cast(JsonObject, parsed)
+
+
+def _template_custom_fields(
+    request: ReportGenerationRequest,
+    generated_custom_fields: dict[str, object],
+) -> dict[str, object]:
+    custom_fields = dict(generated_custom_fields)
+    for field in request.template_fields:
+        custom_name = custom_field_name(field)
+        if custom_name is None or custom_name in custom_fields:
+            continue
+        value = get_source_value(request.source_data, field)
+        if value is None:
+            value = get_source_value(request.source_data, custom_name)
+        custom_fields[custom_name] = value if value is not None else ""
+    return custom_fields
+
+
+def _render_template_body(
+    request: ReportGenerationRequest,
+    report: ReportContent,
+) -> str | None:
+    template_context = request.source_data.get("template")
+    if not isinstance(template_context, dict):
+        return None
+    render_text = template_context.get("render_text")
+    if not isinstance(render_text, str) or not render_text.strip():
+        return None
+    return render_template_text(render_text, report)
 
 
 _TASK_EXTRACTION_SYSTEM_PROMPT = """

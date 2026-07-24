@@ -49,6 +49,15 @@ const saving = ref(false);
 const reportTitle = ref('');
 const reportDate = ref(new Date().toISOString().slice(0, 10));
 const style = ref('concise');
+const selectedTemplate = computed(
+  () => templates.value.find((template) => template.id === templateId.value) || null,
+);
+const selectedTemplateFields = computed(() => {
+  const fields = selectedTemplate.value?.field_config?.fields;
+  return Array.isArray(fields)
+    ? fields.filter((field): field is string => typeof field === 'string')
+    : [];
+});
 
 onMounted(async () => {
   try {
@@ -79,7 +88,11 @@ async function doExtract() {
     const response = await extractTasks({
       source_text: sourceText.value,
       report_type: reportType.value,
-      context: uploadedFile.value ? { uploaded_file: uploadedFile.value } : {},
+      context: {
+        uploaded_file: uploadedFile.value,
+        template_id: templateId.value,
+        template_fields: selectedTemplateFields.value,
+      },
     });
     tasks.value = (response.data || []).map((task) => ({ ...task, user_confirmed: false }));
     if (!tasks.value.length) ElMessage.warning('没有识别到任务，可以手动添加');
@@ -93,7 +106,15 @@ async function doExtract() {
 async function doCheckMissing() {
   checking.value = true;
   try {
-    const response = await checkMissingInfo(tasks.value);
+    const response = await checkMissingInfo({
+      tasks: tasks.value,
+      template_id: templateId.value,
+      template_fields: selectedTemplateFields.value,
+      source_data: {
+        answers: answers.value,
+        uploaded_file: uploadedFile.value,
+      },
+    });
     missing.value = response.data;
   } catch (error) {
     missing.value = null;
@@ -119,11 +140,13 @@ async function doGenerate() {
       report_date: reportDate.value,
       tasks: tasks.value,
       template_id: templateId.value,
+      template_fields: selectedTemplateFields.value,
       style: style.value,
       source_data: {
         answers: answers.value,
         uploaded_file: uploadedFile.value,
         ocr_text: ocrText.value,
+        template_fields: selectedTemplateFields.value,
       },
     });
     report.value = response.data;
@@ -153,6 +176,7 @@ async function saveAndEdit() {
         content: report.value,
         answers: answers.value,
         uploaded_file: uploadedFile.value,
+        template_fields: selectedTemplateFields.value,
       },
     });
     if (!response.data?.id) {

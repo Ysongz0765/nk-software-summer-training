@@ -17,7 +17,12 @@ class AIReportService(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def check_missing_information(self, tasks: list[TaskItem]) -> MissingInformationResult:
+    async def check_missing_information(
+        self,
+        tasks: list[TaskItem],
+        template_fields: list[str] | None = None,
+        source_data: dict[str, object] | None = None,
+    ) -> MissingInformationResult:
         raise NotImplementedError
 
     @abstractmethod

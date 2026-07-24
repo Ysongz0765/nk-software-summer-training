@@ -60,12 +60,20 @@ class MissingInformationResult(BaseModel):
     confidence: float = 1.0
 
 
+class MissingInformationRequest(BaseModel):
+    tasks: list[TaskItem] = Field(default_factory=list)
+    template_id: int | None = None
+    template_fields: list[str] = Field(default_factory=list)
+    source_data: dict[str, object] = Field(default_factory=dict)
+
+
 class ReportGenerationRequest(BaseModel):
     report_type: str
     title: str
     report_date: date
     tasks: list[TaskItem] = Field(default_factory=list)
     template_id: int | None = None
+    template_fields: list[str] = Field(default_factory=list)
     style: str = "concise"
     source_data: dict[str, object] = Field(default_factory=dict)
 

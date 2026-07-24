@@ -1,10 +1,50 @@
 <script setup lang="ts">
+import { computed } from 'vue';
+
 import type { ReportContent } from '@/types/reportflow';
 
-defineProps<{ report: ReportContent }>();
+const props = defineProps<{ report: ReportContent }>();
 
 const statusLabel = (s: string) =>
   ({ completed: '已完成', in_progress: '进行中', pending: '未开始', cancelled: '已取消' })[s] || s;
+const internalCustomFields = new Set([
+  'generated_by',
+  'model',
+  'style',
+  'rendered_template',
+  'template_fields',
+  'template_id',
+  'template_name',
+]);
+
+const renderedTemplate = computed(() => {
+  const value = props.report.custom_fields?.rendered_template;
+  return typeof value === 'string' && value.trim() ? value : '';
+});
+
+const customFieldRows = computed(() =>
+  Object.entries(props.report.custom_fields || {})
+    .filter(([key, value]) => !internalCustomFields.has(key) && hasDisplayValue(value))
+    .map(([key, value]) => ({ key, value: formatCustomValue(value) })),
+);
+
+function hasDisplayValue(value: unknown) {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'string') return Boolean(value.trim());
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'object') return Object.keys(value).length > 0;
+  return true;
+}
+
+function formatCustomValue(value: unknown) {
+  if (Array.isArray(value)) return value.join('\n');
+  if (value && typeof value === 'object') {
+    return Object.entries(value)
+      .map(([key, item]) => `${key}: ${String(item)}`)
+      .join('\n');
+  }
+  return String(value);
+}
 </script>
 
 <template>
@@ -23,12 +63,19 @@ const statusLabel = (s: string) =>
       </div>
     </div>
 
-    <el-card shadow="never"
+    <el-card shadow="never" v-if="renderedTemplate" class="template-body">
+      <p>{{ renderedTemplate }}</p>
+    </el-card>
+
+    <el-card shadow="never" v-if="!renderedTemplate"
       ><template #header><strong>工作总结</strong></template>
       <p>{{ report.summary || '暂无' }}</p>
     </el-card>
 
-    <el-card shadow="never" v-if="report.completed_tasks.length || report.in_progress_tasks.length">
+    <el-card
+      shadow="never"
+      v-if="!renderedTemplate && (report.completed_tasks.length || report.in_progress_tasks.length)"
+    >
       <template #header><strong>任务列表</strong></template>
       <el-table
         :data="[
@@ -63,23 +110,30 @@ const statusLabel = (s: string) =>
       </el-table>
     </el-card>
 
-    <el-card shadow="never" v-if="report.problems?.length"
+    <el-card shadow="never" v-if="!renderedTemplate && report.problems?.length"
       ><template #header><strong>问题与风险</strong></template>
       <ul>
         <li v-for="(p, i) in report.problems" :key="i">{{ p }}</li>
       </ul>
     </el-card>
-    <el-card shadow="never" v-if="report.solutions?.length"
+    <el-card shadow="never" v-if="!renderedTemplate && report.solutions?.length"
       ><template #header><strong>解决方案</strong></template>
       <ul>
         <li v-for="(s, i) in report.solutions" :key="i">{{ s }}</li>
       </ul>
     </el-card>
-    <el-card shadow="never" v-if="report.next_plan?.length"
+    <el-card shadow="never" v-if="!renderedTemplate && report.next_plan?.length"
       ><template #header><strong>下一步计划</strong></template>
       <ul>
         <li v-for="(n, i) in report.next_plan" :key="i">{{ n }}</li>
       </ul>
+    </el-card>
+    <el-card shadow="never" v-if="customFieldRows.length">
+      <template #header><strong>模板字段</strong></template>
+      <div class="custom-field" v-for="field in customFieldRows" :key="field.key">
+        <span>{{ field.key }}</span>
+        <p>{{ field.value }}</p>
+      </div>
     </el-card>
   </div>
 </template>
@@ -108,5 +162,26 @@ li {
 p {
   margin: 0;
   line-height: 1.8;
+}
+.custom-field {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) 1fr;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid #eef2f7;
+}
+.custom-field:last-child {
+  border-bottom: 0;
+}
+.custom-field span {
+  color: #667085;
+  font-size: 13px;
+  font-weight: 600;
+}
+.custom-field p {
+  white-space: pre-line;
+}
+.template-body p {
+  white-space: pre-line;
 }
 </style>
