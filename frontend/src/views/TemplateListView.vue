@@ -22,7 +22,7 @@ const uploadForm = reactive({
   description: '',
   template_type: 'daily' as string,
 });
-const ALLOWED_EXTENSIONS = '.docx,.xlsx';
+const ALLOWED_EXTENSIONS = '.docx,.xlsx,.pdf';
 const uploadFileName = computed(() => uploadFileList.value[0]?.name || '');
 
 function openUploadDialog() {
@@ -43,7 +43,7 @@ function handleFileChange(file: UploadFile) {
 function beforeUpload(raw: UploadRawFile) {
   const suffix = '.' + raw.name.split('.').pop()?.toLowerCase();
   if (!ALLOWED_EXTENSIONS.split(',').includes(suffix)) {
-    ElMessage.error('仅支持 .docx 和 .xlsx 格式');
+    ElMessage.error('仅支持 .docx / .xlsx / .pdf 格式');
     return false;
   }
   if (raw.size > 20 * 1024 * 1024) {
@@ -154,7 +154,7 @@ onMounted(load);
     <div class="page-header">
       <div>
         <h2>模板库</h2>
-        <p class="muted">管理 Word / Excel 报表模板</p>
+        <p class="muted">管理 Word / Excel / PDF 报表模板</p>
       </div>
       <el-button type="primary" :icon="Upload" @click="openUploadDialog">
         上传模板
@@ -187,7 +187,7 @@ onMounted(load);
             </div>
             <template #tip>
               <div class="el-upload__tip">
-                支持 .docx / .xlsx 格式，≤ 20MB
+                支持 .docx / .xlsx / .pdf 格式，≤ 20MB
               </div>
             </template>
           </el-upload>
