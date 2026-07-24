@@ -26,16 +26,28 @@ services:
   backend:
     build:
       context: ./backend
-    env_file:
-      - .env
     environment:
+      APP_NAME: ${APP_NAME:-ReportFlow AI}
+      APP_ENV: ${APP_ENV:-development}
+      DEBUG: ${DEBUG:-true}
+      API_V1_PREFIX: ${API_V1_PREFIX:-/api/v1}
       DATABASE_URL: ${DATABASE_URL:-mysql+pymysql://reportflow:change_me@mysql:3306/reportflow?charset=utf8mb4}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-local-env}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
       STORAGE_ROOT: /app/storage
+      OCR_PROVIDER: ${OCR_PROVIDER:-mock}
+      AI_PROVIDER: ${AI_PROVIDER:-mock}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_BASE_URL: ${AI_BASE_URL:-https://api.deepseek.com}
+      AI_MODEL: ${AI_MODEL:-deepseek-chat}
+      AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS:-60}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080}
     volumes:
       - ./storage:/app/storage
     depends_on:
       mysql:
         condition: service_healthy
+    command: ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health').read()"]
       interval: 10s

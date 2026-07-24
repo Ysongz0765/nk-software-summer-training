@@ -33,6 +33,11 @@ pnpm-debug.log*
 # storage/exports/*
 # storage/temp/*
 !storage/**/.gitkeep
+backend/storage/uploads/*
+backend/storage/templates/*
+backend/storage/exports/*
+backend/storage/temp/*
+!backend/storage/**/.gitkeep
 
 # IDE and OS
 .idea/

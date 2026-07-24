@@ -18,6 +18,19 @@ export interface TaskItem {
   user_confirmed: boolean;
 }
 
+export interface User {
+  id: number;
+  username: string;
+  email: string;
+  is_active: boolean;
+}
+
+export interface AuthResponse {
+  access_token: string;
+  token_type: string;
+  user: User;
+}
+
 export interface ReportContent {
   report_type: string;
   title: string;
@@ -53,6 +66,8 @@ export interface Template {
   template_type: string;
   file_id?: number | null;
   field_config: Record<string, unknown>;
+  created_at?: string | null;
+  updated_at?: string | null;
 }
 
 export interface UploadedFile {
@@ -74,9 +89,14 @@ export interface HealthStatus {
 }
 
 export interface FileUploadResult {
+  id?: number;
+  record_id?: number;
   file_id: string;
   original_name: string;
   stored_name: string;
+  file_type?: string;
+  file_size?: number;
+  storage_path?: string;
 }
 
 export interface OCRResult {
@@ -116,14 +136,16 @@ export interface ExportResult {
 }
 
 export interface ReportVersion {
+  id: number;
   report_id: number;
   version_number: number;
   content?: ReportContent | Record<string, unknown>;
   change_note?: string | null;
+  created_at?: string | null;
 }
 
 export interface ReportSummary {
-  id?: number;
+  id: number;
   report_type: string;
   title: string;
   report_date: string;

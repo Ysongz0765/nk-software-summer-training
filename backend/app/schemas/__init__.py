@@ -1,3 +1,4 @@
+from app.schemas.auth import AuthResponse, LoginRequest, RegisterRequest, UserRead
 from app.schemas.common import ApiResponse
 from app.schemas.report import (
     ExportResult,
@@ -6,24 +7,35 @@ from app.schemas.report import (
     ReportContent,
     ReportCreate,
     ReportGenerationRequest,
+    ReportRead,
     ReportSummary,
     ReportUpdate,
+    ReportVersionRead,
     TaskExtractionInput,
     TaskItem,
     TemplateParseResult,
 )
+from app.schemas.template import TemplateCreate, TemplateRead
 
 __all__ = [
     "ApiResponse",
+    "AuthResponse",
     "ExportResult",
+    "LoginRequest",
     "MissingInformationResult",
     "OCRResult",
     "ReportContent",
     "ReportCreate",
     "ReportGenerationRequest",
+    "ReportRead",
     "ReportSummary",
     "ReportUpdate",
+    "ReportVersionRead",
+    "RegisterRequest",
     "TaskExtractionInput",
     "TaskItem",
+    "TemplateCreate",
     "TemplateParseResult",
+    "TemplateRead",
+    "UserRead",
 ]

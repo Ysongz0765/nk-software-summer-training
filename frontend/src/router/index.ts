@@ -50,4 +50,15 @@ const router = createRouter({
   ],
 });
 
+router.beforeEach((to) => {
+  const token = localStorage.getItem('reportflow_token');
+  if (to.name !== 'login' && !token) {
+    return { name: 'login', query: { redirect: to.fullPath } };
+  }
+  if (to.name === 'login' && token) {
+    return { name: 'dashboard' };
+  }
+  return true;
+});
+
 export default router;

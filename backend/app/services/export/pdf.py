@@ -10,6 +10,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
@@ -22,6 +23,9 @@ FONT_CANDIDATES = (
     Path("C:/Windows/Fonts/msyh.ttc"),
     Path("C:/Windows/Fonts/simhei.ttf"),
     Path("C:/Windows/Fonts/simsun.ttc"),
+    Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
+    Path("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc"),
+    Path("/usr/share/fonts/truetype/arphic/ukai.ttc"),
 )
 PAGE_MARGIN = 18 * mm
 ACCENT_COLOR = colors.HexColor("#1F4E79")
@@ -83,8 +87,10 @@ def _register_chinese_font() -> str:
         pdfmetrics.registerFont(TTFont(FONT_NAME, str(font_path)))
         return FONT_NAME
 
-    msg = "No Chinese font found. Install Microsoft YaHei, SimHei, or SimSun."
-    raise RuntimeError(msg)
+    fallback_font = "STSong-Light"
+    if fallback_font not in pdfmetrics.getRegisteredFontNames():
+        pdfmetrics.registerFont(UnicodeCIDFont(fallback_font))
+    return fallback_font
 
 
 def _build_styles(font_name: str) -> dict[str, ParagraphStyle]:
@@ -230,7 +236,7 @@ def _build_task_table(tasks: list[TaskItem], styles: dict[str, ParagraphStyle]) 
             [
                 ("BACKGROUND", (0, 0), (-1, 0), HEADER_FILL),
                 ("TEXTCOLOR", (0, 0), (-1, 0), TEXT_COLOR),
-                ("FONTNAME", (0, 0), (-1, -1), FONT_NAME),
+                ("FONTNAME", (0, 0), (-1, -1), styles["table_cell"].fontName),
                 ("GRID", (0, 0), (-1, -1), 0.5, BORDER_COLOR),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
                 ("ALIGN", (0, 1), (0, -1), "CENTER"),

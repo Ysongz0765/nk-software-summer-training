@@ -1,40 +1,163 @@
 <script setup lang="ts">
-import { User, Lock } from '@element-plus/icons-vue';
+import { Lock, Message, User } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
+import type { FormInstance, FormRules } from 'element-plus';
 import { reactive, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
+import { login, register } from '@/api/reportflow';
+import type { AuthResponse } from '@/types/reportflow';
+
+const route = useRoute();
 const router = useRouter();
-const formRef = ref(); const loading = ref(false);
-const form = reactive({ username: '', password: '', remember: false });
-const rules = { username: [{ required: true, message: '请输入用户名', trigger: 'blur' }], password: [{ required: true, message: '请输入密码', trigger: 'blur' }] };
+const formRef = ref<FormInstance>();
+const mode = ref<'login' | 'register'>('login');
+const loading = ref(false);
+const form = reactive({
+  username: '',
+  email: '',
+  password: '',
+});
 
-async function handleLogin() {
+const rules: FormRules = {
+  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+  password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
+  email: [
+    {
+      required: true,
+      message: '请输入邮箱',
+      trigger: 'blur',
+    },
+  ],
+};
+
+async function handleSubmit() {
   const valid = await formRef.value?.validate().catch(() => false);
   if (!valid) return;
+
   loading.value = true;
-  await new Promise(r => setTimeout(r, 600));
-  loading.value = false;
-  router.push('/');
+  try {
+    const response =
+      mode.value === 'login'
+        ? await login({ username: form.username, password: form.password })
+        : await register({
+            username: form.username,
+            email: form.email,
+            password: form.password,
+          });
+
+    if (response.code !== 0 || !response.data) {
+      ElMessage.error(response.message || '操作失败');
+      return;
+    }
+
+    saveAuth(response.data);
+    ElMessage.success(mode.value === 'login' ? '登录成功' : '注册成功');
+    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/';
+    await router.replace(redirect);
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '请求失败');
+  } finally {
+    loading.value = false;
+  }
+}
+
+function saveAuth(auth: AuthResponse) {
+  localStorage.setItem('reportflow_token', auth.access_token);
+  localStorage.setItem('reportflow_user', JSON.stringify(auth.user));
+}
+
+function switchMode(nextMode: 'login' | 'register') {
+  mode.value = nextMode;
+  formRef.value?.clearValidate();
+}
+
+function handleModeChange(value: string | number | boolean) {
+  switchMode(value === 'register' ? 'register' : 'login');
 }
 </script>
 
 <template>
-  <main class="lp">
-    <div class="lb">
-      <div class="lbr"><h1>ReportFlow AI</h1><p>智能报表生成平台</p></div>
-      <el-card shadow="never" class="lc"><h2 style="margin:0 0 24px;text-align:center">账号登录</h2>
-        <el-form ref="formRef" :model="form" :rules="rules" label-position="top" size="large" @submit.prevent="handleLogin">
-          <el-form-item label="用户名" prop="username"><el-input v-model="form.username" placeholder="请输入用户名" :prefix-icon="User"/></el-form-item>
-          <el-form-item label="密码" prop="password"><el-input v-model="form.password" type="password" placeholder="请输入密码" show-password :prefix-icon="Lock"/></el-form-item>
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px"><el-checkbox v-model="form.remember">记住登录</el-checkbox><a href="#" style="font-size:13px;color:#409eff">忘记密码？</a></div>
-          <el-button type="primary" native-type="submit" :loading="loading" style="width:100%">{{loading?'登录中...':'登 录'}}</el-button>
+  <main class="login-page">
+    <section class="login-box">
+      <div class="brand">
+        <h1>ReportFlow AI</h1>
+        <p>智能日报、周报生成平台</p>
+      </div>
+
+      <el-card shadow="never" class="login-card">
+        <el-segmented
+          :model-value="mode"
+          :options="[
+            { label: '登录', value: 'login' },
+            { label: '注册', value: 'register' },
+          ]"
+          style="width: 100%; margin-bottom: 22px"
+          @change="handleModeChange"
+        />
+
+        <el-form
+          ref="formRef"
+          :model="form"
+          :rules="rules"
+          label-position="top"
+          size="large"
+          @submit.prevent="handleSubmit"
+        >
+          <el-form-item label="用户名" prop="username">
+            <el-input v-model="form.username" placeholder="请输入用户名" :prefix-icon="User" />
+          </el-form-item>
+          <el-form-item v-if="mode === 'register'" label="邮箱" prop="email">
+            <el-input v-model="form.email" placeholder="请输入邮箱" :prefix-icon="Message" />
+          </el-form-item>
+          <el-form-item label="密码" prop="password">
+            <el-input
+              v-model="form.password"
+              type="password"
+              placeholder="请输入密码"
+              show-password
+              :prefix-icon="Lock"
+            />
+          </el-form-item>
+          <el-button type="primary" native-type="submit" :loading="loading" style="width: 100%">
+            {{ loading ? '处理中...' : mode === 'login' ? '登录' : '注册并登录' }}
+          </el-button>
         </el-form>
       </el-card>
-      <p class="muted" style="text-align:center;margin-top:24px;font-size:13px">ReportFlow AI v0.1.0</p>
-    </div>
+    </section>
   </main>
 </template>
 
 <style scoped>
-.lp{display:flex;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(135deg,#f5f7fb 0%,#e8ecf1 100%)}.lb{width:min(400px,calc(100vw - 32px))}.lbr{text-align:center;margin-bottom:28px}.lbr h1{margin:0;font-size:28px;letter-spacing:1px;background:linear-gradient(135deg,#409eff,#6366f1);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}.lbr p{margin:6px 0 0;font-size:14px;color:#667085}.lc{border-radius:12px}
+.login-page {
+  display: flex;
+  min-height: 100vh;
+  align-items: center;
+  justify-content: center;
+  background: #f5f7fb;
+}
+
+.login-box {
+  width: min(420px, calc(100vw - 32px));
+}
+
+.brand {
+  margin-bottom: 28px;
+  text-align: center;
+}
+
+.brand h1 {
+  margin: 0;
+  color: #1f2937;
+  font-size: 30px;
+}
+
+.brand p {
+  margin: 8px 0 0;
+  color: #667085;
+}
+
+.login-card {
+  border-radius: 10px;
+}
 </style>

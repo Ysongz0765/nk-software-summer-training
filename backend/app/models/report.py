@@ -24,8 +24,16 @@ class Report(TimestampMixin, Base):
 
     user = relationship("User", back_populates="reports")
     template = relationship("Template", back_populates="reports")
-    versions = relationship("ReportVersion", back_populates="report")
-    exports = relationship("ExportRecord", back_populates="report")
+    versions = relationship(
+        "ReportVersion",
+        back_populates="report",
+        cascade="all, delete-orphan",
+    )
+    exports = relationship(
+        "ExportRecord",
+        back_populates="report",
+        cascade="all, delete-orphan",
+    )
 
 
 class ReportVersion(Base):

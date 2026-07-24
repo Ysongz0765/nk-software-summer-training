@@ -77,9 +77,18 @@ npm run dev
 
 ```powershell
 cd reportflow-ai
-Copy-Item .env.example .env
 docker compose up --build
 ```
+
+默认配置使用 Mock AI/OCR，可以直接完成演示流程。需要自定义数据库密码、JWT 密钥或真实 AI/OCR 时，再复制并编辑环境文件：
+
+```powershell
+Copy-Item .env.example .env
+notepad .env
+docker compose up --build
+```
+
+后端容器启动时会自动执行 `alembic upgrade head` 创建或更新 MySQL 表结构。
 
 访问：
 
@@ -149,7 +158,7 @@ OCR_PROVIDER=mock
 AI_PROVIDER=deepseek
 AI_API_KEY=sk-placeholder
 AI_BASE_URL=https://api.deepseek.com
-AI_MODEL=deepseek-v4-flash
+AI_MODEL=deepseek-chat
 AI_TIMEOUT_SECONDS=60
 
 OCR_PROVIDER=paddle
@@ -193,17 +202,19 @@ npm run lint
 
 - 后端 FastAPI 可启动，提供统一 `/api/v1` 路由。
 - `GET /api/v1/health` 可返回服务状态。
-- 预留文件、OCR、AI、模板、报表和导出 API，并提供 Mock 返回。
+- 提供注册、登录、文件上传、OCR、AI、模板、报表、版本和导出 API。
 - AI 服务已支持 DeepSeek provider，OCR 服务已支持 PaddleOCR 图片识别 provider 和 OCR+AI 联调接口。
+- 报表创建、列表、详情、更新、版本记录、删除和导出记录已接入数据库。
+- Word、PDF、Excel 和 JSON 导出已接入后端与前端入口。
 - SQLAlchemy 模型、Pydantic Schema、Alembic 配置已创建。
 - MySQL 8.4 + PyMySQL 配置已完成，SQLite 测试仍可运行。
-- 前端 Vue 骨架、路由、Pinia、Axios、Element Plus 已配置。
+- 前端 Vue 路由、登录态、上传、任务编辑、报告编辑、历史记录和模板库已接入后端。
 - Docker Compose 包含 frontend、backend、mysql、nginx。
 
 ## 当前未完成功能
 
-- 未完成生产级 OCR 错误恢复、复杂版面还原和完整 Word/Excel/PDF 导出。
-- 未实现完整认证、权限和真实用户体系。
+- 未完成生产级 OCR 错误恢复和复杂版面还原。
+- 当前认证适合课程演示，尚未实现多角色权限、找回密码和管理员后台。
 - 未实现在线富文本编辑器完整体验。
 - 未实现生产级文件存储、病毒扫描和审计日志。
 

@@ -78,6 +78,7 @@ class ExportResult(BaseModel):
 
 
 class ReportSummary(BaseModel):
+    id: int
     report_type: str
     title: str
     report_date: date
@@ -98,3 +99,24 @@ class ReportUpdate(BaseModel):
     status: str | None = None
     content: ReportContent | None = None
     source_data: dict[str, object] | None = None
+
+
+class ReportRead(BaseModel):
+    id: int
+    user_id: int | None = None
+    template_id: int | None = None
+    report_type: str
+    title: str
+    report_date: date
+    status: str
+    content: ReportContent
+    source_data: dict[str, object] = Field(default_factory=dict)
+
+
+class ReportVersionRead(BaseModel):
+    id: int
+    report_id: int
+    version_number: int
+    content: ReportContent
+    change_note: str | None = None
+    created_at: datetime | None = None
