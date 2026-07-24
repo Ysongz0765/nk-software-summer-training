@@ -16,7 +16,10 @@ const reportType = ref((route.query.type as string) || 'daily');
 const uploadedFile = ref<FileUploadResult | null>(null);
 const ocrText = ref(''); const ocrLoading = ref(false); const manualText = ref('');
 function onUploaded(f: FileUploadResult) { uploadedFile.value = f; }
-function onOCRResult(r: OCRResult) { ocrText.value = r.text; manualText.value = r.text; }
+function onOCRResult(r: OCRResult) {
+  ocrText.value = ocrText.value ? ocrText.value + '\n---\n' + r.text : r.text;
+  manualText.value = ocrText.value;
+}
 function onOCRLoading(v: boolean) { ocrLoading.value = v; }
 const sourceText = computed(() => manualText.value.trim());
 
@@ -79,8 +82,7 @@ function goEdit() { if (report.value) router.push({ path: '/reports/1/edit', que
             <el-button size="small" type="primary" :loading="extracting" :icon="MagicStick" @click="doExtract" :disabled="!sourceText">AI 提取任务</el-button>
           </div>
         </template>
-        <div v-if="!tasks.length" class="step-empty"><span style="font-size:40px">📋</span><p>点击「AI 提取任务」从素材中自动识别，或手动添加</p></div>
-        <TaskEditor v-else v-model:tasks="tasks" />
+        <TaskEditor v-model:tasks="tasks" title="任务列表" />
         <div style="margin-top:18px;display:flex;justify-content:space-between">
           <el-button :icon="ArrowLeft" @click="step=0">上一步</el-button>
           <el-button type="primary" :icon="ArrowRight" :disabled="!tasks.length" @click="doCheckMissing();step=2">下一步</el-button>
