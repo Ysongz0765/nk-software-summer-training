@@ -4,6 +4,8 @@ import MainLayout from '@/layouts/MainLayout.vue';
 import CreateReportView from '@/views/CreateReportView.vue';
 import DashboardView from '@/views/DashboardView.vue';
 import LoginView from '@/views/LoginView.vue';
+import ProjectDetailView from '@/views/ProjectDetailView.vue';
+import ProjectListView from '@/views/ProjectListView.vue';
 import ReportEditorView from '@/views/ReportEditorView.vue';
 import ReportHistoryView from '@/views/ReportHistoryView.vue';
 import TemplateListView from '@/views/TemplateListView.vue';
@@ -24,6 +26,16 @@ const router = createRouter({
           path: '',
           name: 'dashboard',
           component: DashboardView,
+        },
+        {
+          path: 'projects',
+          name: 'projects',
+          component: ProjectListView,
+        },
+        {
+          path: 'projects/:id',
+          name: 'project-detail',
+          component: ProjectDetailView,
         },
         {
           path: 'reports/create',

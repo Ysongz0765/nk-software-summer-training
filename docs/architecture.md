@@ -31,6 +31,26 @@ flowchart LR
 - 报表模块：负责报表生命周期、版本和状态流转。
 - 导出模块：只消费 `ReportContent`，输出文件结果。
 - 模板模块：只负责模板解析和字段配置，不依赖报表生成细节。
+- 项目模块：负责项目、任务、成员、项目记忆和项目上下文聚合，其他模块只通过
+  `project_id` 和上下文服务访问项目数据。
+
+## 项目上下文报表流
+
+```mermaid
+flowchart LR
+  P[项目基础信息] --> CTX[Project Context]
+  T[项目任务] --> CTX
+  F[项目文件] --> CTX
+  R[历史报表] --> CTX
+  M[项目记忆] --> CTX
+  CTX --> AI[AI Generate Report]
+  AI --> REP[ReportContent]
+  REP --> DB[(reports)]
+```
+
+当请求 `/api/v1/ai/generate-report` 携带 `project_id` 时，API 层先校验项目所属用户，
+再读取当前项目的任务、文件、成员、历史报表和记忆，组装为
+`source_data.project_context`。AI 服务只能基于该上下文和本次请求任务生成报表。
 
 ## 数据库边界
 

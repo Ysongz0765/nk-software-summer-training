@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { ReportContent, TaskItem } from '@/types/reportflow';
 
-const props = defineProps<{ report: ReportContent }>();
+defineProps<{ report: ReportContent }>();
 
 const reportTypeLabel = (t: string) =>
   ({ daily: '日报', weekly: '周报', monthly: '月报', custom: '自定义' })[t] || t;
@@ -33,23 +33,37 @@ function listItems(items: string[]): string[] {
 
     <!-- 二、已完成任务 -->
     <h3 class="rp-heading">二、已完成任务</h3>
-    <p v-for="(line, i) in taskItems(report.completed_tasks || [])" :key="'c' + i" class="rp-body">{{ line }}</p>
+    <p v-for="(line, i) in taskItems(report.completed_tasks || [])" :key="'c' + i" class="rp-body">
+      {{ line }}
+    </p>
 
     <!-- 三、进行中任务 -->
     <h3 class="rp-heading">三、进行中任务</h3>
-    <p v-for="(line, i) in taskItems(report.in_progress_tasks || [])" :key="'p' + i" class="rp-body">{{ line }}</p>
+    <p
+      v-for="(line, i) in taskItems(report.in_progress_tasks || [])"
+      :key="'p' + i"
+      class="rp-body"
+    >
+      {{ line }}
+    </p>
 
     <!-- 四、问题与风险 -->
     <h3 class="rp-heading">四、问题与风险</h3>
-    <p v-for="(line, i) in listItems(report.problems || [])" :key="'b' + i" class="rp-body">{{ line }}</p>
+    <p v-for="(line, i) in listItems(report.problems || [])" :key="'b' + i" class="rp-body">
+      {{ line }}
+    </p>
 
     <!-- 五、解决方案 -->
     <h3 class="rp-heading">五、解决方案</h3>
-    <p v-for="(line, i) in listItems(report.solutions || [])" :key="'s' + i" class="rp-body">{{ line }}</p>
+    <p v-for="(line, i) in listItems(report.solutions || [])" :key="'s' + i" class="rp-body">
+      {{ line }}
+    </p>
 
     <!-- 六、下一步计划 -->
     <h3 class="rp-heading">六、下一步计划</h3>
-    <p v-for="(line, i) in listItems(report.next_plan || [])" :key="'n' + i" class="rp-body">{{ line }}</p>
+    <p v-for="(line, i) in listItems(report.next_plan || [])" :key="'n' + i" class="rp-body">
+      {{ line }}
+    </p>
   </div>
 </template>
 
@@ -58,7 +72,7 @@ function listItems(items: string[]): string[] {
   background: #fff;
   border: 1px solid #d0d5dd;
   border-radius: 4px;
-  box-shadow: 0 2px 12px rgba(15, 23, 42, .06);
+  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.06);
   padding: 56px 64px;
   max-width: 760px;
   margin: 0 auto;

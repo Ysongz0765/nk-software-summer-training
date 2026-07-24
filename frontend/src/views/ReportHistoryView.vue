@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { Delete, Download, Edit, Plus, View } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { deleteReport, exportReport, listReports } from '@/api/reportflow';
+import { useAppStore } from '@/stores/app';
 import type { ReportSummary } from '@/types/reportflow';
 
 const router = useRouter();
+const appStore = useAppStore();
 const reports = ref<ReportSummary[]>([]);
 const loading = ref(false);
 const exportingId = ref<number | null>(null);
@@ -18,13 +20,17 @@ const statusTag = (status: string) =>
   ({ draft: 'info', published: 'success', archived: 'warning' })[status] || 'info';
 const statusLabel = (status: string) =>
   ({ draft: '草稿', published: '已发布', archived: '已归档' })[status] || status;
+const scopeText = computed(() =>
+  appStore.currentProject ? `当前项目：${appStore.currentProject.name}` : '全部无项目报表',
+);
 
 onMounted(load);
+watch(() => appStore.currentProjectId, load);
 
 async function load() {
   loading.value = true;
   try {
-    const response = await listReports();
+    const response = await listReports(appStore.currentProjectId);
     reports.value = response.data || [];
   } catch (error) {
     reports.value = [];
@@ -72,7 +78,7 @@ async function handleDelete(row: ReportSummary) {
     <div class="page-header">
       <div>
         <h2>历史报表</h2>
-        <p class="muted">管理已创建的所有报表</p>
+        <p class="muted">{{ scopeText }}</p>
       </div>
       <el-button type="primary" :icon="Plus" @click="router.push('/reports/create')">
         创建新报表

@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_optional_current_user
@@ -16,6 +16,7 @@ from app.models.user import User
 from app.schemas.common import ApiResponse
 from app.schemas.report import TemplateParseResult
 from app.schemas.template import TemplateCreate, TemplatePreview, TemplateRead
+from app.services.project_context import ensure_project_access, touch_project
 from app.services.template.context import (
     template_fields,
     template_file_path,
@@ -35,7 +36,11 @@ async def create_template(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User | None, Depends(get_optional_current_user)],
 ) -> ApiResponse[TemplateRead]:
+    project = None
+    if payload.project_id is not None:
+        project = ensure_project_access(db, payload.project_id, current_user)
     file_record = _resolve_file_record(payload, db)
+    _ensure_template_file_access(file_record, payload.project_id, current_user)
     field_config = dict(payload.field_config)
 
     if file_record is not None and file_record.stored_name.lower().endswith(
@@ -47,6 +52,7 @@ async def create_template(
 
     template = Template(
         user_id=current_user.id if current_user else None,
+        project_id=payload.project_id,
         name=payload.name.strip(),
         description=payload.description,
         template_type=payload.template_type,
@@ -54,6 +60,8 @@ async def create_template(
         field_config=field_config,
     )
     db.add(template)
+    if project is not None:
+        touch_project(db, project, commit=False)
     db.commit()
     db.refresh(template)
     return ApiResponse(data=_template_read(template))
@@ -63,12 +71,25 @@ async def create_template(
 async def list_templates(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User | None, Depends(get_optional_current_user)],
+    project_id: Annotated[int | None, Query()] = None,
 ) -> ApiResponse[list[TemplateRead]]:
     _ensure_default_templates(db)
+    if project_id is not None:
+        ensure_project_access(db, project_id, current_user)
     query = db.query(Template)
     if current_user is not None:
         query = query.filter((Template.user_id.is_(None)) | (Template.user_id == current_user.id))
-    templates = query.order_by(Template.user_id.is_not(None), Template.id).all()
+    else:
+        query = query.filter(Template.user_id.is_(None))
+    if project_id is not None:
+        query = query.filter((Template.project_id.is_(None)) | (Template.project_id == project_id))
+    else:
+        query = query.filter(Template.project_id.is_(None))
+    templates = query.order_by(
+        Template.project_id.is_not(None),
+        Template.user_id.is_not(None),
+        Template.id,
+    ).all()
     return ApiResponse(data=[_template_read(template) for template in templates])
 
 
@@ -76,10 +97,12 @@ async def list_templates(
 async def get_template(
     template_id: int,
     db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User | None, Depends(get_optional_current_user)],
 ) -> ApiResponse[TemplateRead]:
     template = db.get(Template, template_id)
     if template is None:
         raise ResourceNotFoundError()
+    _ensure_template_access(template, current_user)
     return ApiResponse(data=_template_read(template))
 
 
@@ -92,8 +115,7 @@ async def preview_template(
     template = db.get(Template, template_id)
     if template is None:
         raise ResourceNotFoundError()
-    if current_user is not None and template.user_id not in {None, current_user.id}:
-        raise ResourceNotFoundError()
+    _ensure_template_access(template, current_user)
     return ApiResponse(data=_template_preview(template))
 
 
@@ -105,13 +127,18 @@ async def preview_template(
 async def delete_template(
     template_id: int,
     db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User | None, Depends(get_optional_current_user)],
 ) -> ApiResponse[dict[str, int]]:
     template = db.get(Template, template_id)
     if template is None:
         raise ResourceNotFoundError()
+    _ensure_template_access(template, current_user)
     if template.user_id is None and template.file_id is None:
         raise ResourceNotFoundError("default templates cannot be deleted")
+    project = template.project
     db.delete(template)
+    if project is not None:
+        touch_project(db, project, commit=False)
     db.commit()
     return ApiResponse(data={"id": template_id})
 
@@ -139,6 +166,33 @@ def _resolve_file_record(payload: TemplateCreate, db: Session) -> UploadedFile |
         if record is not None:
             return record
     return None
+
+
+def _ensure_template_access(template: Template, current_user: User | None) -> None:
+    if current_user is not None and template.user_id not in {None, current_user.id}:
+        raise ResourceNotFoundError()
+    if current_user is None and template.user_id is not None:
+        raise ResourceNotFoundError()
+    if template.project_id is not None:
+        if (
+            current_user is None
+            or template.project is None
+            or template.project.user_id != current_user.id
+        ):
+            raise ResourceNotFoundError()
+
+
+def _ensure_template_file_access(
+    file_record: UploadedFile | None,
+    project_id: int | None,
+    current_user: User | None,
+) -> None:
+    if file_record is None:
+        return
+    if current_user is not None and file_record.user_id not in {None, current_user.id}:
+        raise ResourceNotFoundError("template file not found")
+    if project_id is not None and file_record.project_id not in {None, project_id}:
+        raise ResourceNotFoundError("template file not found")
 
 
 async def _parse_template_path(file_path: str) -> TemplateParseResult:
@@ -224,6 +278,7 @@ def _template_read(template: Template) -> TemplateRead:
     return TemplateRead(
         id=template.id,
         user_id=template.user_id,
+        project_id=template.project_id,
         name=template.name,
         description=template.description,
         template_type=template.template_type,

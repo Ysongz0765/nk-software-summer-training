@@ -52,6 +52,7 @@ def load_template_context(
     db: Session,
     template_id: int | None,
     user_id: int | None = None,
+    project_id: int | None = None,
 ) -> TemplateContext | None:
     if template_id is None:
         return None
@@ -60,6 +61,10 @@ def load_template_context(
     if template is None:
         raise ResourceNotFoundError("template not found")
     if user_id is not None and template.user_id not in {None, user_id}:
+        raise PermissionDeniedError("template access denied")
+    if template.project_id is not None and template.project_id != project_id:
+        raise PermissionDeniedError("template access denied")
+    if project_id is None and template.project_id is not None:
         raise PermissionDeniedError("template access denied")
 
     field_config = template.field_config or {}

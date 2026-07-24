@@ -14,6 +14,7 @@ const emit = defineEmits<{
   (e: 'ocr-loading', loading: boolean): void;
   (e: 'all-uploaded', results: FileUploadResult[]): void;
 }>();
+const props = defineProps<{ projectId?: number | null }>();
 
 const fileList = ref<UploadUserFile[]>([]);
 const uploading = ref(false);
@@ -22,11 +23,6 @@ const uploadedResults = ref<FileUploadResult[]>([]);
 const uploadProgress = ref({ current: 0, total: 0 });
 
 const ALLOWED = ['.png', '.jpg', '.jpeg', '.pdf', '.docx', '.xlsx', '.txt'];
-
-function getPreviewType(name: string) {
-  const ext = name.toLowerCase().split('.').pop() || '';
-  return ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'].includes(ext) ? 'image' : 'other';
-}
 
 const beforeUpload = (file: File) => {
   const suffix = '.' + file.name.split('.').pop()?.toLowerCase();
@@ -52,6 +48,7 @@ async function handleUpload() {
     try {
       const fd = new FormData();
       fd.append('file', item.raw);
+      if (props.projectId) fd.append('project_id', String(props.projectId));
       const res = await http.post<ApiResponse<FileUploadResult>>('/files/upload', fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 30000,
@@ -126,16 +123,19 @@ defineExpose({ clearFiles });
       <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
       <div class="el-upload__text">将文件拖到此处，或<em>点击上传</em></div>
       <template #tip>
-        <div class="el-upload__tip">
-          PNG / JPG / PDF / DOCX / XLSX / TXT，≤20MB，支持多文件
-        </div>
+        <div class="el-upload__tip">PNG / JPG / PDF / DOCX / XLSX / TXT，≤20MB，支持多文件</div>
       </template>
     </el-upload>
     <div v-if="fileList.length" style="margin-top: 12px; text-align: right">
       <span v-if="uploading && uploadProgress.total > 1" style="margin-right: 12px; color: #667085">
         上传中 {{ uploadProgress.current }}/{{ uploadProgress.total }}
       </span>
-      <el-button type="primary" :loading="uploading" :disabled="uploadDisabled" @click="handleUpload">
+      <el-button
+        type="primary"
+        :loading="uploading"
+        :disabled="uploadDisabled"
+        @click="handleUpload"
+      >
         {{ uploading ? '上传中...' : `上传 ${fileList.length} 个文件` }}
       </el-button>
     </div>

@@ -14,6 +14,11 @@ class Report(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     template_id: Mapped[int | None] = mapped_column(ForeignKey("templates.id"), nullable=True)
     report_type: Mapped[str] = mapped_column(String(32), default="daily")
     title: Mapped[str] = mapped_column(String(255))
@@ -23,6 +28,7 @@ class Report(TimestampMixin, Base):
     source_data: Mapped[dict[str, object]] = mapped_column(JSONDict, default=dict)
 
     user = relationship("User", back_populates="reports")
+    project = relationship("Project", back_populates="reports")
     template = relationship("Template", back_populates="reports")
     versions = relationship(
         "ReportVersion",
@@ -54,9 +60,15 @@ class ExportRecord(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     report_id: Mapped[int] = mapped_column(ForeignKey("reports.id"), index=True)
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     export_type: Mapped[str] = mapped_column(String(32))
     file_path: Mapped[str] = mapped_column(String(512))
     status: Mapped[str] = mapped_column(String(32), default="created")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     report = relationship("Report", back_populates="exports")
+    project = relationship("Project", back_populates="exports")

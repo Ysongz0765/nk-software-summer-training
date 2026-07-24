@@ -16,10 +16,18 @@ class ReportRepository(BaseRepository):
     def get(self, report_id: int) -> Report | None:
         return self.db.get(Report, report_id)
 
-    def list_reports(self, user_id: int | None = None) -> list[Report]:
+    def list_reports(
+        self,
+        user_id: int | None = None,
+        project_id: int | None = None,
+    ) -> list[Report]:
         query = self.db.query(Report)
         if user_id is not None:
             query = query.filter(Report.user_id == user_id)
+        elif project_id is None:
+            query = query.filter(Report.project_id.is_(None))
+        if project_id is not None:
+            query = query.filter(Report.project_id == project_id)
         return list(query.order_by(desc(Report.created_at), desc(Report.id)).all())
 
     def save(self, report: Report) -> Report:
@@ -69,12 +77,14 @@ class ReportRepository(BaseRepository):
     def create_export_record(
         self,
         report_id: int,
+        project_id: int | None,
         export_type: str,
         file_path: str,
         status: str,
     ) -> ExportRecord:
         record = ExportRecord(
             report_id=report_id,
+            project_id=project_id,
             export_type=export_type,
             file_path=file_path,
             status=status,

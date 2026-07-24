@@ -284,6 +284,8 @@ _REPORT_GENERATION_SYSTEM_PROMPT = """
 你是 ReportFlow AI 的日报/周报内容生成模块。你必须只输出一个 json 对象，不要输出 Markdown。
 
 输入包含 report_type、title、report_date、tasks、style 和 source_data。
+source_data 可能包含 project_context。若存在，必须优先使用其中的项目背景、项目阶段、
+最近任务、最近文件、历史报告和项目记忆，并且只能基于当前项目上下文生成内容。
 请生成满足 ReportContent Schema 的结构化报表。
 
 输出 JSON 示例：
@@ -309,6 +311,9 @@ _REPORT_GENERATION_SYSTEM_PROMPT = """
 - completed_tasks 放 completed 状态任务。
 - in_progress_tasks 放非 completed 状态任务。
 - 不要虚构未出现在输入中的关键事实。
+- 如果输入含有 project_context，标题、summary、problems、solutions 和 next_plan
+  必须体现当前项目背景。
+- 不要把 in_progress 或 blocked 状态写成 completed。
 - 如果信息不足，在 missing_fields 中明确标出。
 - 所有字段必须满足项目 Pydantic Schema。
 """.strip()

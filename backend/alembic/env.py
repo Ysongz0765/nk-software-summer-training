@@ -7,7 +7,18 @@ from sqlalchemy import engine_from_config, pool
 
 from app.core.config import get_settings
 from app.core.database import Base
-from app.models import ExportRecord, Report, ReportVersion, Template, UploadedFile, User
+from app.models import (
+    ExportRecord,
+    Project,
+    ProjectMember,
+    ProjectMemory,
+    ProjectTask,
+    Report,
+    ReportVersion,
+    Template,
+    UploadedFile,
+    User,
+)
 
 config = context.config
 settings = get_settings()

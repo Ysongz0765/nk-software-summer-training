@@ -99,11 +99,14 @@ class MockAIReportService(AIReportService):
             ]
 
         custom_fields = _build_template_custom_fields(request)
+        project_context = _project_context(request.source_data)
+        summary_prefix = _project_summary_prefix(project_context, request)
         report = ReportContent(
             report_type=request.report_type,
-            title=request.title,
+            title=request.title or _project_report_title(project_context, request.report_type),
             date=request.report_date,
             summary=(
+                f"{summary_prefix}"
                 f"本期共识别 {len(request.tasks)} 项任务，"
                 f"已完成 {len(completed)} 项，推进中 {len(active)} 项。"
             ),
@@ -270,3 +273,49 @@ def _render_template_body(
     if not isinstance(render_text, str) or not render_text.strip():
         return None
     return render_template_text(render_text, report)
+
+
+def _project_context(source_data: dict[str, object]) -> dict[str, object]:
+    context = source_data.get("project_context")
+    return context if isinstance(context, dict) else {}
+
+
+def _project_report_title(project_context: dict[str, object], report_type: str) -> str:
+    project_name = _project_name(project_context)
+    if project_name:
+        return f"{project_name}{'日报' if report_type == 'daily' else '周报'}"
+    return "项目报表"
+
+
+def _project_summary_prefix(
+    project_context: dict[str, object],
+    request: ReportGenerationRequest,
+) -> str:
+    project_name = _project_name(project_context)
+    stage = _project_stage(project_context)
+    parts: list[str] = []
+    if project_name:
+        parts.append(f"项目「{project_name}」")
+    if stage:
+        parts.append(f"当前阶段「{stage}」")
+    if request.user_notes.strip():
+        parts.append(f"用户备注：{request.user_notes.strip()}")
+    return "；".join(parts) + ("；" if parts else "")
+
+
+def _project_name(project_context: dict[str, object]) -> str:
+    profile = project_context.get("project_profile")
+    if isinstance(profile, dict):
+        name = profile.get("name")
+        if isinstance(name, str) and name.strip():
+            return name.strip()
+    return ""
+
+
+def _project_stage(project_context: dict[str, object]) -> str:
+    profile = project_context.get("project_profile")
+    if isinstance(profile, dict):
+        stage = profile.get("current_stage")
+        if isinstance(stage, str) and stage.strip():
+            return stage.strip()
+    return ""

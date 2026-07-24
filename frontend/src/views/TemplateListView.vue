@@ -2,7 +2,7 @@
 import { Delete, Upload, View } from '@element-plus/icons-vue';
 import { isAxiosError } from 'axios';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
 import {
@@ -12,9 +12,11 @@ import {
   previewTemplate,
   uploadFile,
 } from '@/api/reportflow';
+import { useAppStore } from '@/stores/app';
 import type { Template, TemplatePreview } from '@/types/reportflow';
 
 const router = useRouter();
+const appStore = useAppStore();
 const templates = ref<Template[]>([]);
 const loading = ref(false);
 const uploading = ref(false);
@@ -28,15 +30,19 @@ const typeLabel = (type: string) =>
   ({ daily: '日报', weekly: '周报', monthly: '月报', custom: '自定义' })[type] || type;
 const typeTag = (type: string) =>
   ({ daily: 'primary', weekly: 'success', monthly: 'warning', custom: 'info' })[type] || 'info';
+const scopeText = computed(() =>
+  appStore.currentProject ? `当前项目：${appStore.currentProject.name}` : '全局模板',
+);
 const previewSegments = computed(() => splitPreviewBody(preview.value?.body || ''));
 const sourcePreviewDocument = computed(() => buildSourcePreviewDocument(preview.value?.html));
 
 onMounted(load);
+watch(() => appStore.currentProjectId, load);
 
 async function load() {
   loading.value = true;
   try {
-    const response = await listTemplates();
+    const response = await listTemplates(appStore.currentProjectId);
     templates.value = response.data || [];
   } catch (error) {
     templates.value = [];
@@ -66,7 +72,7 @@ async function uploadTemplate(file: File) {
 
   uploading.value = true;
   try {
-    const uploadResponse = await uploadFile(file);
+    const uploadResponse = await uploadFile(file, appStore.currentProjectId);
     if (uploadResponse.code !== 0 || !uploadResponse.data) {
       ElMessage.error(uploadResponse.message || '上传失败');
       return;
@@ -74,6 +80,7 @@ async function uploadTemplate(file: File) {
     await createTemplate({
       name: file.name.replace(/\.[^.]+$/, ''),
       file_path: uploadResponse.data.file_id,
+      project_id: appStore.currentProjectId,
       template_type:
         file.name.includes('周') || file.name.toLowerCase().includes('week') ? 'weekly' : 'daily',
     });
@@ -269,7 +276,7 @@ function templateUploadErrorMessage(error: unknown) {
     <div class="page-header">
       <div>
         <h2>模板库</h2>
-        <p class="muted">管理 Word / Excel / PDF 报表模板</p>
+        <p class="muted">管理 Word / Excel / PDF 报表模板 · {{ scopeText }}</p>
       </div>
       <el-button type="primary" :icon="Upload" :loading="uploading" @click="handleUpload">
         上传模板
@@ -292,6 +299,11 @@ function templateUploadErrorMessage(error: unknown) {
         </el-table-column>
         <el-table-column prop="description" label="描述" min-width="200">
           <template #default="{ row }">{{ row.description || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="范围" width="90">
+          <template #default="{ row }">
+            <el-tag size="small" effect="plain">{{ row.project_id ? '项目' : '全局' }}</el-tag>
+          </template>
         </el-table-column>
         <el-table-column label="字段数" width="80" align="center">
           <template #default="{ row }">

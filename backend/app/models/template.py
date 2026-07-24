@@ -12,6 +12,11 @@ class Template(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     name: Mapped[str] = mapped_column(String(128))
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     template_type: Mapped[str] = mapped_column(String(32), default="daily")
@@ -19,5 +24,6 @@ class Template(TimestampMixin, Base):
     field_config: Mapped[dict[str, object]] = mapped_column(JSONDict, default=dict)
 
     user = relationship("User", back_populates="templates")
+    project = relationship("Project", back_populates="templates")
     file = relationship("UploadedFile", back_populates="templates")
     reports = relationship("Report", back_populates="template")

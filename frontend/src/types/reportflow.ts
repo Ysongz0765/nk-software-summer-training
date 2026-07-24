@@ -49,6 +49,8 @@ export interface ReportContent {
 export interface Report {
   id: number;
   user_id?: number | null;
+  project_id?: number | null;
+  project?: ProjectReference | null;
   template_id?: number | null;
   report_type: string;
   title: string;
@@ -61,6 +63,7 @@ export interface Report {
 export interface Template {
   id: number;
   user_id?: number | null;
+  project_id?: number | null;
   name: string;
   description?: string | null;
   template_type: string;
@@ -105,6 +108,7 @@ export interface FileUploadResult {
   id?: number;
   record_id?: number;
   file_id: string;
+  project_id?: number | null;
   original_name: string;
   stored_name: string;
   file_type?: string;
@@ -127,6 +131,7 @@ export interface MissingInformationResult {
 
 export interface MissingInformationRequest {
   tasks: TaskItem[];
+  project_id?: number | null;
   template_id?: number | null;
   template_fields?: string[];
   source_data?: Record<string, unknown>;
@@ -142,7 +147,13 @@ export interface ReportGenerationRequest {
   report_type: string;
   title: string;
   report_date: string;
+  project_id?: number | null;
+  start_date?: string | null;
+  end_date?: string | null;
   tasks: TaskItem[];
+  file_ids?: number[];
+  task_ids?: number[];
+  user_notes?: string;
   template_id?: number | null;
   template_fields?: string[];
   style?: string;
@@ -167,6 +178,7 @@ export interface ReportVersion {
 
 export interface ReportSummary {
   id: number;
+  project_id?: number | null;
   report_type: string;
   title: string;
   report_date: string;
@@ -179,4 +191,115 @@ export interface TemplateParseResult {
   fields: string[];
   description: string;
   raw_content: Record<string, unknown>;
+}
+
+export interface ProjectReference {
+  id: number;
+  name: string;
+  status: string;
+  current_stage?: string | null;
+}
+
+export interface Project {
+  id: number;
+  user_id: number;
+  name: string;
+  description?: string | null;
+  project_type?: string | null;
+  status: string;
+  current_stage?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  tech_stack: string[];
+  background_summary?: string | null;
+  last_activity_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  file_count?: number;
+  report_count?: number;
+  task_total?: number;
+  task_completed?: number;
+}
+
+export interface ProjectTask {
+  id: number;
+  project_id: number;
+  title: string;
+  description?: string | null;
+  module?: string | null;
+  status: string;
+  priority?: string | null;
+  owner?: string | null;
+  start_date?: string | null;
+  due_date?: string | null;
+  completed_at?: string | null;
+  source_type?: string | null;
+  confidence?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface ProjectMember {
+  id: number;
+  project_id: number;
+  name: string;
+  role?: string | null;
+  responsibility?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface ProjectMemory {
+  id: number;
+  project_id: number;
+  memory_type: string;
+  content: string;
+  source_ids: number[];
+  is_user_confirmed: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface ProjectFile {
+  id: number;
+  user_id?: number | null;
+  project_id?: number | null;
+  original_name: string;
+  stored_name: string;
+  file_type: string;
+  file_size: number;
+  storage_path: string;
+  status: string;
+  created_at?: string | null;
+}
+
+export interface ProjectReport {
+  id: number;
+  project_id?: number | null;
+  report_type: string;
+  title: string;
+  report_date: string;
+  status: string;
+  task_count: number;
+}
+
+export interface ProjectContext {
+  project: Project;
+  members: ProjectMember[];
+  recent_tasks: ProjectTask[];
+  completed_tasks: ProjectTask[];
+  in_progress_tasks: ProjectTask[];
+  blocked_tasks: ProjectTask[];
+  recent_files: ProjectFile[];
+  recent_reports: ProjectReport[];
+  project_memories: ProjectMemory[];
+  background_summary: string;
+}
+
+export interface ProjectSummarySuggestion {
+  generated_summary: string;
+  suggested_current_stage?: string | null;
+  suggested_tech_stack: string[];
+  suggested_completed_work: string[];
+  suggested_current_problems: string[];
 }

@@ -2,7 +2,7 @@
 import { ArrowLeft, ArrowRight, Check, MagicStick, Plus } from '@element-plus/icons-vue';
 import { isAxiosError } from 'axios';
 import { ElMessage } from 'element-plus';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import {
@@ -11,16 +11,19 @@ import {
   createTemplate,
   extractTasks,
   generateReport,
+  getProjectContext,
   listTemplates,
   uploadFile,
 } from '@/api/reportflow';
 import FileUploader from '@/components/FileUploader.vue';
 import ReportPreview from '@/components/ReportPreview.vue';
 import TaskEditor from '@/components/TaskEditor.vue';
+import { useAppStore } from '@/stores/app';
 import type {
   FileUploadResult,
   MissingInformationResult,
   OCRResult,
+  ProjectContext,
   ReportContent,
   TaskItem,
   Template,
@@ -28,12 +31,20 @@ import type {
 
 const route = useRoute();
 const router = useRouter();
+const appStore = useAppStore();
 const step = ref(0);
 const reportType = ref((route.query.type as string) || 'daily');
+const projectId = ref<number | null>(
+  typeof route.query.project_id === 'string' ? Number(route.query.project_id) : null,
+);
 const templateId = ref<number | null>(
   typeof route.query.template_id === 'string' ? Number(route.query.template_id) : null,
 );
 const templates = ref<Template[]>([]);
+const projectContext = ref<ProjectContext | null>(null);
+const contextLoading = ref(false);
+const selectedFileIds = ref<number[]>([]);
+const selectedTaskIds = ref<number[]>([]);
 
 const uploadedFiles = ref<FileUploadResult[]>([]);
 const ocrTexts = ref<string[]>([]);
@@ -41,7 +52,9 @@ const ocrText = computed(() => ocrTexts.value.join('\n'));
 const ocrLoading = ref(false);
 const manualText = ref('');
 const sourceText = computed(() => [ocrText.value, manualText.value].filter(Boolean).join('\n'));
-const hasSourceMaterial = computed(() => Boolean(sourceText.value.trim() || uploadedFiles.value.length));
+const hasSourceMaterial = computed(() =>
+  Boolean(sourceText.value.trim() || uploadedFiles.value.length),
+);
 
 const tasks = ref<TaskItem[]>([]);
 const extracting = ref(false);
@@ -53,8 +66,23 @@ const evidenceFiles = ref<Record<string, FileUploadResult[]>>({});
 const evidenceUploading = ref(false);
 
 function isEvidenceField(field: string): boolean {
-  const keywords = ['evidence', 'attachment', 'image', 'photo', 'screenshot',
-    'file', 'upload', '证据', '附件', '截图', '图片', '文件', '照片', '凭证', '附件材料'];
+  const keywords = [
+    'evidence',
+    'attachment',
+    'image',
+    'photo',
+    'screenshot',
+    'file',
+    'upload',
+    '证据',
+    '附件',
+    '截图',
+    '图片',
+    '文件',
+    '照片',
+    '凭证',
+    '附件材料',
+  ];
   const lower = field.toLowerCase();
   return keywords.some((kw) => lower.includes(kw));
 }
@@ -62,10 +90,13 @@ function isEvidenceField(field: string): boolean {
 async function onEvidenceUpload(field: string, file: File) {
   evidenceUploading.value = true;
   try {
-    const result = await uploadFile(file);
+    const result = await uploadFile(file, projectId.value);
     if (result.code === 0 && result.data) {
       const current = evidenceFiles.value[field] || [];
       evidenceFiles.value = { ...evidenceFiles.value, [field]: [...current, result.data] };
+      if (result.data.record_id && !selectedFileIds.value.includes(result.data.record_id)) {
+        selectedFileIds.value = [...selectedFileIds.value, result.data.record_id];
+      }
     }
   } catch {
     ElMessage.error(`${file.name} 上传失败`);
@@ -104,23 +135,63 @@ const style = ref('concise');
 const selectedTemplate = computed(
   () => templates.value.find((template) => template.id === templateId.value) || null,
 );
+const currentProject = computed(
+  () => appStore.projects.find((project) => project.id === projectId.value) || null,
+);
 const selectedTemplateFields = computed(() => {
   const fields = selectedTemplate.value?.field_config?.fields;
   return Array.isArray(fields)
     ? fields.filter((field): field is string => typeof field === 'string')
     : [];
 });
+const contextSummary = computed(() => {
+  if (!projectContext.value) return null;
+  return {
+    files: selectedFileIds.value.length || projectContext.value.recent_files.length,
+    tasks: selectedTaskIds.value.length || projectContext.value.recent_tasks.length,
+    reports: projectContext.value.recent_reports.length,
+    blocked: projectContext.value.blocked_tasks.length,
+  };
+});
 
 onMounted(async () => {
-  await loadTemplateList();
+  await appStore.refreshProjects();
+  if (!projectId.value) projectId.value = appStore.currentProjectId;
+  await loadTemplateAndContext();
 });
+
+watch(projectId, async (value) => {
+  appStore.setCurrentProject(value || null);
+  templateId.value = null;
+  selectedFileIds.value = [];
+  selectedTaskIds.value = [];
+  await loadTemplateAndContext();
+});
+
+async function loadTemplateAndContext() {
+  await Promise.all([loadTemplateList(), loadProjectContext()]);
+}
 
 async function loadTemplateList() {
   try {
-    const response = await listTemplates();
+    const response = await listTemplates(projectId.value);
     templates.value = response.data || [];
   } catch (error) {
     ElMessage.warning(error instanceof Error ? error.message : '模板列表加载失败');
+  }
+}
+
+async function loadProjectContext() {
+  projectContext.value = null;
+  if (!projectId.value) return;
+  contextLoading.value = true;
+  try {
+    const response = await getProjectContext(projectId.value);
+    projectContext.value = response.data;
+  } catch (error) {
+    ElMessage.warning(error instanceof Error ? error.message : '项目上下文加载失败');
+  } finally {
+    contextLoading.value = false;
   }
 }
 
@@ -153,7 +224,7 @@ async function handleTemplateUpload(file: File) {
 
   templateUploading.value = true;
   try {
-    const uploadRes = await uploadFile(file);
+    const uploadRes = await uploadFile(file, projectId.value);
     if (uploadRes.code !== 0 || !uploadRes.data) {
       ElMessage.error(uploadRes.message || '上传失败');
       return;
@@ -162,6 +233,7 @@ async function handleTemplateUpload(file: File) {
       name: file.name.replace(/\.[^.]+$/, ''),
       file_path: uploadRes.data.file_id,
       template_type: reportType.value,
+      project_id: projectId.value,
     });
     await loadTemplateList();
     // 自动选中新上传的模板
@@ -181,11 +253,22 @@ async function handleTemplateUpload(file: File) {
 
 function onUploaded(file: FileUploadResult) {
   uploadedFiles.value = [...uploadedFiles.value, file];
+  if (file.record_id && !selectedFileIds.value.includes(file.record_id)) {
+    selectedFileIds.value = [...selectedFileIds.value, file.record_id];
+  }
+  void loadProjectContext();
 }
 
 function onUploadCleared() {
+  const uploadedRecordIds = new Set(
+    uploadedFiles.value
+      .map((file) => file.record_id)
+      .filter((id): id is number => typeof id === 'number'),
+  );
+  selectedFileIds.value = selectedFileIds.value.filter((id) => !uploadedRecordIds.has(id));
   uploadedFiles.value = [];
   ocrTexts.value = [];
+  void loadProjectContext();
 }
 
 function onOCRResult(result: OCRResult) {
@@ -205,6 +288,8 @@ async function doExtract() {
       source_text: sourceText.value,
       report_type: reportType.value,
       context: {
+        project_id: projectId.value,
+        project_context: projectContext.value,
         uploaded_files: uploadedFiles.value,
         evidence_files: evidenceFiles.value,
         template_id: templateId.value,
@@ -225,10 +310,12 @@ async function doCheckMissing() {
   try {
     const response = await checkMissingInfo({
       tasks: tasks.value,
+      project_id: projectId.value,
       template_id: templateId.value,
       template_fields: selectedTemplateFields.value,
       source_data: {
         answers: answers.value,
+        project_context: projectContext.value,
         uploaded_files: uploadedFiles.value,
         evidence_files: evidenceFiles.value,
       },
@@ -256,12 +343,19 @@ async function doGenerate() {
         reportTitle.value ||
         `${reportType.value === 'daily' ? '日报' : '周报'} - ${reportDate.value}`,
       report_date: reportDate.value,
+      project_id: projectId.value,
+      start_date: reportDate.value,
+      end_date: reportDate.value,
       tasks: tasks.value,
+      file_ids: selectedFileIds.value,
+      task_ids: selectedTaskIds.value,
+      user_notes: manualText.value,
       template_id: templateId.value,
       template_fields: selectedTemplateFields.value,
       style: style.value,
       source_data: {
         answers: answers.value,
+        project_context: projectContext.value,
         uploaded_files: uploadedFiles.value,
         ocr_text: ocrText.value,
         template_fields: selectedTemplateFields.value,
@@ -290,10 +384,12 @@ async function saveAndEdit() {
       report_type: report.value.report_type,
       title: report.value.title,
       report_date: report.value.date,
+      project_id: projectId.value,
       template_id: templateId.value,
       source_data: {
         content: report.value,
         answers: answers.value,
+        project_context: projectContext.value,
         uploaded_files: uploadedFiles.value,
         evidence_files: evidenceFiles.value,
         template_fields: selectedTemplateFields.value,
@@ -321,6 +417,53 @@ async function saveAndEdit() {
       </div>
     </div>
 
+    <el-card shadow="never" class="project-context-card" v-loading="contextLoading">
+      <el-row :gutter="16">
+        <el-col :span="8">
+          <label class="field-label">项目</label>
+          <el-select v-model="projectId" clearable filterable style="width: 100%">
+            <el-option
+              v-for="project in appStore.projects"
+              :key="project.id"
+              :label="project.name"
+              :value="project.id"
+            />
+          </el-select>
+        </el-col>
+        <el-col :span="8">
+          <label class="field-label">报表类型</label>
+          <el-select v-model="reportType" style="width: 100%">
+            <el-option label="日报" value="daily" />
+            <el-option label="周报" value="weekly" />
+            <el-option label="阶段总结" value="stage_summary" />
+          </el-select>
+        </el-col>
+        <el-col :span="8">
+          <label class="field-label">时间</label>
+          <el-date-picker
+            v-model="reportDate"
+            type="date"
+            style="width: 100%"
+            value-format="YYYY-MM-DD"
+          />
+        </el-col>
+      </el-row>
+      <div v-if="currentProject && contextSummary" class="context-summary">
+        <span>当前项目：{{ currentProject.name }}</span>
+        <span>项目阶段：{{ currentProject.current_stage || '未设置' }}</span>
+        <span>已选择文件：{{ selectedFileIds.length }} 个</span>
+        <span>可读取任务：{{ contextSummary.tasks }} 项</span>
+        <span>历史报表：{{ contextSummary.reports }} 份</span>
+        <span>当前问题：{{ contextSummary.blocked }} 项</span>
+      </div>
+      <el-alert
+        v-else
+        type="info"
+        :closable="false"
+        title="未选择项目时将按旧流程生成无项目报表。"
+      />
+    </el-card>
+
     <el-steps :active="step" align-center finish-status="success" style="margin-bottom: 28px">
       <el-step title="上传素材" description="截图或文档" />
       <el-step title="确认任务" description="AI 自动提取" />
@@ -331,6 +474,7 @@ async function saveAndEdit() {
     <div v-show="step === 0">
       <el-card shadow="never">
         <FileUploader
+          :project-id="projectId"
           @uploaded="onUploaded"
           @cleared="onUploadCleared"
           @ocr-result="onOCRResult"
@@ -345,7 +489,12 @@ async function saveAndEdit() {
           :disabled="ocrLoading"
         />
         <div class="step-actions end">
-          <el-button type="primary" :icon="ArrowRight" :disabled="!hasSourceMaterial" @click="step = 1">
+          <el-button
+            type="primary"
+            :icon="ArrowRight"
+            :disabled="!hasSourceMaterial"
+            @click="step = 1"
+          >
             下一步
           </el-button>
         </div>
@@ -369,6 +518,9 @@ async function saveAndEdit() {
             </el-button>
           </div>
         </template>
+        <div v-if="!tasks.length" class="step-empty">
+          <p>点击“AI 提取任务”从素材中自动识别，或手动添加。</p>
+        </div>
         <TaskEditor v-model:tasks="tasks" title="任务列表" />
         <div class="step-actions between">
           <el-button :icon="ArrowLeft" @click="step = 0">上一步</el-button>
@@ -420,7 +572,10 @@ async function saveAndEdit() {
                 >
                   添加证据文件
                 </el-button>
-                <div v-if="(evidenceFiles[missing.missing_fields[index]] || []).length" class="evidence-list">
+                <div
+                  v-if="(evidenceFiles[missing.missing_fields[index]] || []).length"
+                  class="evidence-list"
+                >
                   <el-tag
                     v-for="(ef, ei) in evidenceFiles[missing.missing_fields[index]]"
                     :key="ef.file_id"
@@ -434,7 +589,11 @@ async function saveAndEdit() {
               </div>
             </template>
             <!-- 普通字段 → 输入框 -->
-            <el-input v-else v-model="answers[missing.missing_fields[index]]" placeholder="请输入..." />
+            <el-input
+              v-else
+              v-model="answers[missing.missing_fields[index]]"
+              placeholder="请输入..."
+            />
           </div>
         </div>
 
@@ -469,7 +628,11 @@ async function saveAndEdit() {
                 clearable
                 placeholder="选择已有模板"
                 style="flex: 1"
-                @visible-change="(visible: boolean) => { if (visible) loadTemplateList(); }"
+                @visible-change="
+                  (visible: boolean) => {
+                    if (visible) loadTemplateList();
+                  }
+                "
               >
                 <el-option
                   v-for="tpl in templates"
@@ -478,14 +641,48 @@ async function saveAndEdit() {
                   :value="tpl.id"
                 />
               </el-select>
-              <el-button
-                :icon="Plus"
-                :loading="templateUploading"
-                @click="pickTemplateFile"
-              >
+              <el-button :icon="Plus" :loading="templateUploading" @click="pickTemplateFile">
                 添加模板
               </el-button>
             </div>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16" style="margin-top: 14px">
+          <el-col :span="12">
+            <label class="field-label">相关文件</label>
+            <el-select
+              v-model="selectedFileIds"
+              multiple
+              clearable
+              collapse-tags
+              style="width: 100%"
+              placeholder="选择本次报表使用的项目文件"
+            >
+              <el-option
+                v-for="file in projectContext?.recent_files || []"
+                :key="file.id"
+                :label="file.original_name"
+                :value="file.id"
+              />
+            </el-select>
+          </el-col>
+          <el-col :span="12">
+            <label class="field-label">相关任务</label>
+            <el-select
+              v-model="selectedTaskIds"
+              multiple
+              clearable
+              collapse-tags
+              style="width: 100%"
+              placeholder="选择本次报表重点任务"
+            >
+              <el-option
+                v-for="task in projectContext?.recent_tasks || []"
+                :key="task.id"
+                :label="task.title"
+                :value="task.id"
+              />
+            </el-select>
           </el-col>
         </el-row>
         <div class="step-actions between">
@@ -580,5 +777,18 @@ async function saveAndEdit() {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.project-context-card {
+  margin-bottom: 18px;
+}
+
+.context-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  margin-top: 14px;
+  color: #475467;
+  font-size: 13px;
 }
 </style>

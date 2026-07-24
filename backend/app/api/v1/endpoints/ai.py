@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_optional_current_user
 from app.core.database import get_db
 from app.models.user import User
+from app.repositories.project import ProjectRepository
 from app.schemas.common import ApiResponse
 from app.schemas.report import (
     MissingInformationRequest,
@@ -19,6 +20,12 @@ from app.schemas.report import (
 )
 from app.services.ai.base import AIReportService
 from app.services.ai.factory import get_ai_report_service
+from app.services.project_context import (
+    build_ai_project_context,
+    ensure_project_access,
+    project_tasks_to_task_items,
+    selected_project_tasks,
+)
 from app.services.template.context import TemplateContext, load_template_context
 
 router = APIRouter()
@@ -41,10 +48,13 @@ async def check_missing(
     current_user: Annotated[User | None, Depends(get_optional_current_user)],
 ) -> ApiResponse[MissingInformationResult]:
     request = _missing_information_request(payload)
+    if request.project_id is not None:
+        ensure_project_access(db, request.project_id, current_user)
     template_context = load_template_context(
         db,
         request.template_id,
         current_user.id if current_user else None,
+        project_id=request.project_id,
     )
     source_data = _source_data_with_template(request.source_data, template_context)
     template_fields = _merge_template_fields(
@@ -66,18 +76,46 @@ async def generate_report(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User | None, Depends(get_optional_current_user)],
 ) -> ApiResponse[ReportContent]:
+    project = None
+    project_context: dict[str, object] | None = None
+    project_tasks: list[TaskItem] = []
+    if payload.project_id is not None:
+        project = ensure_project_access(db, payload.project_id, current_user)
+        period_start = payload.start_date or payload.report_date
+        period_end = payload.end_date or payload.report_date
+        project_context = build_ai_project_context(
+            db,
+            project,
+            start_date=period_start,
+            end_date=period_end,
+            file_ids=payload.file_ids,
+            task_ids=payload.task_ids,
+            user_notes=payload.user_notes,
+        )
+        loaded_tasks = selected_project_tasks(db, project.id, payload.task_ids)
+        if not loaded_tasks and not payload.tasks:
+            loaded_tasks = ProjectRepository(db).list_tasks(project.id)[:10]
+        project_tasks = project_tasks_to_task_items(loaded_tasks)
+
     template_context = load_template_context(
         db,
         payload.template_id,
         current_user.id if current_user else None,
+        project_id=payload.project_id,
     )
+    source_data = _source_data_with_template(payload.source_data, template_context)
+    if project_context is not None:
+        source_data["project_context"] = project_context
+        source_data["project_id"] = payload.project_id
     request = payload.model_copy(
         update={
+            "title": payload.title or _default_project_report_title(project, payload.report_type),
+            "tasks": _merge_tasks(payload.tasks, project_tasks),
             "template_fields": _merge_template_fields(
                 payload.template_fields,
                 template_context.fields if template_context else [],
             ),
-            "source_data": _source_data_with_template(payload.source_data, template_context),
+            "source_data": source_data,
         },
     )
     report = await ai_service.generate_report(request)
@@ -113,3 +151,21 @@ def _source_data_with_template(
     if template_context is not None:
         data["template"] = template_context.model_payload()
     return data
+
+
+def _merge_tasks(primary: list[TaskItem], extra: list[TaskItem]) -> list[TaskItem]:
+    merged: list[TaskItem] = []
+    seen: set[str] = set()
+    for task in [*primary, *extra]:
+        if task.id in seen:
+            continue
+        merged.append(task)
+        seen.add(task.id)
+    return merged
+
+
+def _default_project_report_title(project: object, report_type: str) -> str:
+    project_name = getattr(project, "name", "")
+    if isinstance(project_name, str) and project_name:
+        return f"{project_name}{'日报' if report_type == 'daily' else '周报'}"
+    return ""

@@ -19,3 +19,4 @@ class User(TimestampMixin, Base):
     files = relationship("UploadedFile", back_populates="user")
     templates = relationship("Template", back_populates="user")
     reports = relationship("Report", back_populates="user")
+    projects = relationship("Project", back_populates="user")

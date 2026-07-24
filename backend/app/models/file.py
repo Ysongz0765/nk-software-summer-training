@@ -13,6 +13,11 @@ class UploadedFile(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     original_name: Mapped[str] = mapped_column(String(255))
     stored_name: Mapped[str] = mapped_column(String(255))
     file_type: Mapped[str] = mapped_column(String(64))
@@ -22,4 +27,5 @@ class UploadedFile(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="files")
+    project = relationship("Project", back_populates="files")
     templates = relationship("Template", back_populates="file")

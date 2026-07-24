@@ -1,20 +1,28 @@
 <script setup lang="ts">
 import { Document, Files, Plus, TrendCharts, Upload } from '@element-plus/icons-vue';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { listReports, listTemplates } from '@/api/reportflow';
+import { useAppStore } from '@/stores/app';
 import type { ReportSummary } from '@/types/reportflow';
 
 const router = useRouter();
+const appStore = useAppStore();
 const reports = ref<ReportSummary[]>([]);
 const templateCount = ref(0);
 const reportsLoading = ref(false);
 
-onMounted(async () => {
+onMounted(loadDashboard);
+watch(() => appStore.currentProjectId, loadDashboard);
+
+async function loadDashboard() {
   reportsLoading.value = true;
   try {
-    const [reportResponse, templateResponse] = await Promise.all([listReports(), listTemplates()]);
+    const [reportResponse, templateResponse] = await Promise.all([
+      listReports(appStore.currentProjectId),
+      listTemplates(appStore.currentProjectId),
+    ]);
     reports.value = (reportResponse.data || []).slice(0, 5);
     templateCount.value = templateResponse.data?.length || 0;
   } catch {
@@ -23,7 +31,7 @@ onMounted(async () => {
   } finally {
     reportsLoading.value = false;
   }
-});
+}
 
 const statusTag = (s: string) =>
   ({ draft: 'info', published: 'success', archived: 'warning' })[s] || 'info';

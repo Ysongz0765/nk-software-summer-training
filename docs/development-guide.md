@@ -24,6 +24,51 @@ DATABASE_URL=mysql+pymysql://reportflow:change_me@mysql:3306/reportflow?charset=
 - 再接入前端占位页面。
 - 最后扩展 OCR、AI、模板和导出模块。
 
+## 项目空间本地验证
+
+1. 执行迁移：
+
+```powershell
+cd reportflow-ai\backend
+.\.venv\Scripts\python -m alembic upgrade head
+```
+
+2. 启动后端和前端：
+
+```powershell
+cd reportflow-ai\backend
+.\.venv\Scripts\python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+cd reportflow-ai\frontend
+npm run dev
+```
+
+3. 登录后进入“项目空间”，创建项目。
+4. 在项目详情中添加任务、成员并上传项目文件。
+5. 切换顶部“当前项目”，进入“创建报表”，选择相关文件和任务后生成报表。
+6. 项目上下文会作为 `source_data.project_context` 进入 AI 生成流程。
+
+新增测试命令：
+
+```powershell
+cd reportflow-ai\backend
+.\.venv\Scripts\python -m pytest tests\test_projects.py
+```
+
+完整检查命令：
+
+```powershell
+cd reportflow-ai\backend
+.\.venv\Scripts\python -m ruff check app tests
+.\.venv\Scripts\python -m mypy app
+.\.venv\Scripts\python -m pytest
+
+cd reportflow-ai\frontend
+npm run type-check
+npm run lint
+npm run build
+```
+
 ## 代码规范
 
 - Python 使用 Ruff 和 MyPy。

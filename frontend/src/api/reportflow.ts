@@ -8,6 +8,12 @@ import type {
   MissingInformationRequest,
   MissingInformationResult,
   OCRResult,
+  Project,
+  ProjectContext,
+  ProjectFile,
+  ProjectMember,
+  ProjectSummarySuggestion,
+  ProjectTask,
   Report,
   ReportContent,
   ReportGenerationRequest,
@@ -48,9 +54,13 @@ export async function getMe(): Promise<ApiResponse<User>> {
   return response.data;
 }
 
-export async function uploadFile(file: File): Promise<ApiResponse<FileUploadResult>> {
+export async function uploadFile(
+  file: File,
+  projectId?: number | null,
+): Promise<ApiResponse<FileUploadResult>> {
   const fd = new FormData();
   fd.append('file', file);
+  if (projectId) fd.append('project_id', String(projectId));
   const response = await http.post<ApiResponse<FileUploadResult>>('/files/upload', fd, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 60000,
@@ -100,6 +110,7 @@ export async function createReport(payload: {
   report_type: string;
   title: string;
   report_date: string;
+  project_id?: number | null;
   template_id?: number | null;
   source_data?: Record<string, unknown>;
 }): Promise<ApiResponse<Report>> {
@@ -107,8 +118,12 @@ export async function createReport(payload: {
   return response.data;
 }
 
-export async function listReports(): Promise<ApiResponse<ReportSummary[]>> {
-  const response = await http.get<ApiResponse<ReportSummary[]>>('/reports');
+export async function listReports(
+  projectId?: number | null,
+): Promise<ApiResponse<ReportSummary[]>> {
+  const response = await http.get<ApiResponse<ReportSummary[]>>('/reports', {
+    params: projectId ? { project_id: projectId } : undefined,
+  });
   return response.data;
 }
 
@@ -160,8 +175,10 @@ export async function exportReport(
   return response.data;
 }
 
-export async function listTemplates(): Promise<ApiResponse<Template[]>> {
-  const response = await http.get<ApiResponse<Template[]>>('/templates');
+export async function listTemplates(projectId?: number | null): Promise<ApiResponse<Template[]>> {
+  const response = await http.get<ApiResponse<Template[]>>('/templates', {
+    params: projectId ? { project_id: projectId } : undefined,
+  });
   return response.data;
 }
 
@@ -179,6 +196,7 @@ export async function createTemplate(payload: {
   name: string;
   description?: string | null;
   template_type: string;
+  project_id?: number | null;
   file_path?: string | null;
   file_id?: number | null;
   field_config?: Record<string, unknown>;
@@ -198,5 +216,154 @@ export async function parseTemplate(filePath: string): Promise<ApiResponse<Templ
 
 export async function deleteTemplate(templateId: number): Promise<ApiResponse<{ id: number }>> {
   const response = await http.delete<ApiResponse<{ id: number }>>(`/templates/${templateId}`);
+  return response.data;
+}
+
+export async function createProject(payload: {
+  name: string;
+  description?: string | null;
+  project_type?: string | null;
+  status?: string;
+  current_stage?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  tech_stack?: string[];
+  background_summary?: string | null;
+}): Promise<ApiResponse<Project>> {
+  const response = await http.post<ApiResponse<Project>>('/projects', payload);
+  return response.data;
+}
+
+export async function listProjects(status?: string | null): Promise<ApiResponse<Project[]>> {
+  const response = await http.get<ApiResponse<Project[]>>('/projects', {
+    params: status ? { status } : undefined,
+  });
+  return response.data;
+}
+
+export async function getProject(projectId: number): Promise<ApiResponse<Project>> {
+  const response = await http.get<ApiResponse<Project>>(`/projects/${projectId}`);
+  return response.data;
+}
+
+export async function updateProject(
+  projectId: number,
+  payload: Partial<Project>,
+): Promise<ApiResponse<Project>> {
+  const response = await http.patch<ApiResponse<Project>>(`/projects/${projectId}`, payload);
+  return response.data;
+}
+
+export async function archiveProject(projectId: number): Promise<ApiResponse<{ id: number }>> {
+  const response = await http.delete<ApiResponse<{ id: number }>>(`/projects/${projectId}`);
+  return response.data;
+}
+
+export async function createProjectTask(
+  projectId: number,
+  payload: {
+    title: string;
+    description?: string | null;
+    module?: string | null;
+    status?: string;
+    priority?: string | null;
+    owner?: string | null;
+    start_date?: string | null;
+    due_date?: string | null;
+  },
+): Promise<ApiResponse<ProjectTask>> {
+  const response = await http.post<ApiResponse<ProjectTask>>(
+    `/projects/${projectId}/tasks`,
+    payload,
+  );
+  return response.data;
+}
+
+export async function listProjectTasks(
+  projectId: number,
+  params?: { status?: string | null; module?: string | null },
+): Promise<ApiResponse<ProjectTask[]>> {
+  const response = await http.get<ApiResponse<ProjectTask[]>>(`/projects/${projectId}/tasks`, {
+    params,
+  });
+  return response.data;
+}
+
+export async function updateProjectTask(
+  projectId: number,
+  taskId: number,
+  payload: Partial<ProjectTask>,
+): Promise<ApiResponse<ProjectTask>> {
+  const response = await http.patch<ApiResponse<ProjectTask>>(
+    `/projects/${projectId}/tasks/${taskId}`,
+    payload,
+  );
+  return response.data;
+}
+
+export async function deleteProjectTask(
+  projectId: number,
+  taskId: number,
+): Promise<ApiResponse<{ id: number }>> {
+  const response = await http.delete<ApiResponse<{ id: number }>>(
+    `/projects/${projectId}/tasks/${taskId}`,
+  );
+  return response.data;
+}
+
+export async function createProjectMember(
+  projectId: number,
+  payload: { name: string; role?: string | null; responsibility?: string | null },
+): Promise<ApiResponse<ProjectMember>> {
+  const response = await http.post<ApiResponse<ProjectMember>>(
+    `/projects/${projectId}/members`,
+    payload,
+  );
+  return response.data;
+}
+
+export async function listProjectMembers(projectId: number): Promise<ApiResponse<ProjectMember[]>> {
+  const response = await http.get<ApiResponse<ProjectMember[]>>(`/projects/${projectId}/members`);
+  return response.data;
+}
+
+export async function updateProjectMember(
+  projectId: number,
+  memberId: number,
+  payload: Partial<ProjectMember>,
+): Promise<ApiResponse<ProjectMember>> {
+  const response = await http.patch<ApiResponse<ProjectMember>>(
+    `/projects/${projectId}/members/${memberId}`,
+    payload,
+  );
+  return response.data;
+}
+
+export async function deleteProjectMember(
+  projectId: number,
+  memberId: number,
+): Promise<ApiResponse<{ id: number }>> {
+  const response = await http.delete<ApiResponse<{ id: number }>>(
+    `/projects/${projectId}/members/${memberId}`,
+  );
+  return response.data;
+}
+
+export async function listProjectFiles(projectId: number): Promise<ApiResponse<ProjectFile[]>> {
+  const response = await http.get<ApiResponse<ProjectFile[]>>(`/projects/${projectId}/files`);
+  return response.data;
+}
+
+export async function getProjectContext(projectId: number): Promise<ApiResponse<ProjectContext>> {
+  const response = await http.get<ApiResponse<ProjectContext>>(`/projects/${projectId}/context`);
+  return response.data;
+}
+
+export async function generateProjectSummary(
+  projectId: number,
+): Promise<ApiResponse<ProjectSummarySuggestion>> {
+  const response = await http.post<ApiResponse<ProjectSummarySuggestion>>(
+    `/projects/${projectId}/generate-summary`,
+  );
   return response.data;
 }

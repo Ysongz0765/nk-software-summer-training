@@ -9,6 +9,7 @@ class TemplateCreate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     description: str | None = None
     template_type: str = "daily"
+    project_id: int | None = None
     file_path: str | None = None
     file_id: int | None = None
     field_config: dict[str, object] = Field(default_factory=dict)
@@ -17,6 +18,7 @@ class TemplateCreate(BaseModel):
 class TemplateRead(BaseModel):
     id: int
     user_id: int | None = None
+    project_id: int | None = None
     name: str
     description: str | None = None
     template_type: str

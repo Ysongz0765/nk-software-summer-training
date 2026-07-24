@@ -5,6 +5,7 @@ ReportFlow AI 是一个网页端智能报表生成平台骨架，用于生成、
 ## 核心功能
 
 - 文件上传、OCR、AI 抽取、模板解析、报表生成和导出的 API 边界。
+- 项目空间：按项目隔离文件、任务、成员、模板、报表和 AI 生成上下文。
 - 统一 `TaskItem` 与 `ReportContent` 数据结构。
 - FastAPI 后端、Vue 3 前端、MySQL 8.4、Alembic 和 Docker Compose 开发环境。
 - 无真实 AI 密钥时可通过 Mock 服务运行。
@@ -203,13 +204,24 @@ npm run lint
 - 后端 FastAPI 可启动，提供统一 `/api/v1` 路由。
 - `GET /api/v1/health` 可返回服务状态。
 - 提供注册、登录、文件上传、OCR、AI、模板、报表、版本和导出 API。
+- 提供项目 CRUD、项目任务、项目成员、项目文件、项目上下文和 AI 项目摘要 API。
 - AI 服务已支持 DeepSeek provider，OCR 服务已支持 PaddleOCR 图片识别 provider 和 OCR+AI 联调接口。
-- 报表创建、列表、详情、更新、版本记录、删除和导出记录已接入数据库。
+- 报表创建、列表、详情、更新、版本记录、删除和导出记录已接入数据库，并支持 `project_id` 绑定和项目筛选。
 - Word、PDF、Excel 和 JSON 导出已接入后端与前端入口。
 - SQLAlchemy 模型、Pydantic Schema、Alembic 配置已创建。
 - MySQL 8.4 + PyMySQL 配置已完成，SQLite 测试仍可运行。
 - 前端 Vue 路由、登录态、上传、任务编辑、报告编辑、历史记录和模板库已接入后端。
+- 前端已支持项目列表、项目详情、当前项目切换和项目上下文报表生成入口。
 - Docker Compose 包含 frontend、backend、mysql、nginx。
+
+## 项目空间使用
+
+1. 登录后进入“项目空间”，创建项目并填写项目类型、当前阶段、技术栈和背景摘要。
+2. 在项目详情中添加项目任务、成员分工，也可以上传项目文件。
+3. 切换顶部“当前项目”后，文件上传、模板库、历史报表和创建报表页面会默认使用该项目。
+4. 创建报表时可选择相关项目文件和项目任务；后端会构建 `project_context`，包含项目背景、成员、任务、文件、历史报表和项目记忆。
+5. 保存报表时传入 `project_id`，报表、导出记录和项目最近活动时间会同步更新。
+6. 项目摘要接口 `POST /api/v1/projects/{project_id}/generate-summary` 当前返回 mock 建议，不会直接覆盖用户确认的背景。
 
 ## 当前未完成功能
 

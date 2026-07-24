@@ -4,6 +4,8 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
+from app.schemas.project import ProjectReference
+
 
 class TaskItem(BaseModel):
     id: str
@@ -62,6 +64,7 @@ class MissingInformationResult(BaseModel):
 
 class MissingInformationRequest(BaseModel):
     tasks: list[TaskItem] = Field(default_factory=list)
+    project_id: int | None = None
     template_id: int | None = None
     template_fields: list[str] = Field(default_factory=list)
     source_data: dict[str, object] = Field(default_factory=dict)
@@ -69,9 +72,15 @@ class MissingInformationRequest(BaseModel):
 
 class ReportGenerationRequest(BaseModel):
     report_type: str
-    title: str
-    report_date: date
+    title: str = ""
+    report_date: date = Field(default_factory=date.today)
+    project_id: int | None = None
+    start_date: date | None = None
+    end_date: date | None = None
     tasks: list[TaskItem] = Field(default_factory=list)
+    file_ids: list[int] = Field(default_factory=list)
+    task_ids: list[int] = Field(default_factory=list)
+    user_notes: str = ""
     template_id: int | None = None
     template_fields: list[str] = Field(default_factory=list)
     style: str = "concise"
@@ -87,6 +96,7 @@ class ExportResult(BaseModel):
 
 class ReportSummary(BaseModel):
     id: int
+    project_id: int | None = None
     report_type: str
     title: str
     report_date: date
@@ -98,6 +108,7 @@ class ReportCreate(BaseModel):
     report_type: str
     title: str
     report_date: date
+    project_id: int | None = None
     template_id: int | None = None
     source_data: dict[str, object] = Field(default_factory=dict)
 
@@ -112,6 +123,8 @@ class ReportUpdate(BaseModel):
 class ReportRead(BaseModel):
     id: int
     user_id: int | None = None
+    project_id: int | None = None
+    project: ProjectReference | None = None
     template_id: int | None = None
     report_type: str
     title: str

@@ -3,16 +3,24 @@ import {
   Document,
   Files,
   Fold,
+  FolderOpened,
   HomeFilled,
   Plus,
   SwitchButton,
   UserFilled,
 } from '@element-plus/icons-vue';
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
+import { useAppStore } from '@/stores/app';
+
 const router = useRouter();
+const appStore = useAppStore();
 const collapsed = ref(false);
+const currentProjectValue = computed({
+  get: () => appStore.currentProjectId,
+  set: (value: number | null) => appStore.setCurrentProject(value || null),
+});
 const currentUser = computed(() => {
   const raw = localStorage.getItem('reportflow_user');
   if (!raw) return { username: '未登录', email: '' };
@@ -21,6 +29,10 @@ const currentUser = computed(() => {
   } catch {
     return { username: '未登录', email: '' };
   }
+});
+
+onMounted(async () => {
+  await appStore.refreshProjects();
 });
 
 function doLogout() {
@@ -49,6 +61,9 @@ function doLogout() {
         <el-menu-item index="/reports/create"
           ><el-icon><Plus /></el-icon><span>创建报表</span></el-menu-item
         >
+        <el-menu-item index="/projects"
+          ><el-icon><FolderOpened /></el-icon><span>项目空间</span></el-menu-item
+        >
         <el-menu-item index="/reports"
           ><el-icon><Document /></el-icon><span>历史报表</span></el-menu-item
         >
@@ -63,6 +78,25 @@ function doLogout() {
           <el-button text size="small" @click="collapsed = !collapsed"
             ><el-icon :size="18"><Fold /></el-icon
           ></el-button>
+          <el-select
+            v-if="!appStore.projectsLoading"
+            v-model="currentProjectValue"
+            clearable
+            filterable
+            size="small"
+            class="project-select"
+            placeholder="当前项目"
+          >
+            <el-option
+              v-for="project in appStore.projects"
+              :key="project.id"
+              :label="project.name"
+              :value="project.id"
+            />
+          </el-select>
+          <el-button size="small" text type="primary" @click="router.push('/projects')">
+            管理项目
+          </el-button>
         </div>
         <div class="topbar-right">
           <el-dropdown trigger="click">
@@ -132,6 +166,10 @@ function doLogout() {
 .topbar-left {
   display: flex;
   align-items: center;
+  gap: 8px;
+}
+.project-select {
+  width: 240px;
 }
 .user-badge {
   display: flex;

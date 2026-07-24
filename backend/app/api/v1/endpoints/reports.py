@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_optional_current_user
@@ -29,6 +29,7 @@ from app.services.export.pdf import PdfExportService
 from app.services.export.template_excel import TemplateExcelExportService
 from app.services.export.template_word import TemplateWordExportService
 from app.services.export.word import WordExportService
+from app.services.project_context import ensure_project_access, project_to_reference, touch_project
 from app.services.template.context import (
     load_template_context,
     template_file_path,
@@ -52,17 +53,22 @@ async def create_report(
     current_user: Annotated[User | None, Depends(get_optional_current_user)],
 ) -> ApiResponse[ReportRead]:
     repository = ReportRepository(db)
+    project = None
+    if payload.project_id is not None:
+        project = ensure_project_access(db, payload.project_id, current_user)
     content = _build_initial_report_content(payload)
     template_context = load_template_context(
         db,
         payload.template_id,
         current_user.id if current_user else None,
+        project_id=payload.project_id,
     )
     if template_context and template_context.render_text:
         content = _content_with_rendered_text(content, template_context.render_text)
     report = repository.create(
         Report(
             user_id=current_user.id if current_user else None,
+            project_id=payload.project_id,
             template_id=payload.template_id,
             report_type=payload.report_type,
             title=payload.title,
@@ -77,6 +83,8 @@ async def create_report(
         content=content.model_dump(mode="json"),
         change_note="initial version",
     )
+    if project is not None:
+        touch_project(db, project)
     return ApiResponse(data=_report_read(report))
 
 
@@ -84,9 +92,15 @@ async def create_report(
 async def list_reports(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User | None, Depends(get_optional_current_user)],
+    project_id: Annotated[int | None, Query()] = None,
 ) -> ApiResponse[list[ReportSummary]]:
     repository = ReportRepository(db)
-    reports = repository.list_reports(user_id=current_user.id if current_user else None)
+    if project_id is not None:
+        ensure_project_access(db, project_id, current_user)
+    reports = repository.list_reports(
+        user_id=current_user.id if current_user else None,
+        project_id=project_id,
+    )
     return ApiResponse(data=[_report_summary(report) for report in reports])
 
 
@@ -216,10 +230,13 @@ async def export_report(
 
     repository.create_export_record(
         report_id=report.id,
+        project_id=report.project_id,
         export_type=result.export_type,
         file_path=result.file_path,
         status=result.status,
     )
+    if report.project is not None:
+        touch_project(db, report.project)
     return ApiResponse(data=result)
 
 
@@ -248,6 +265,7 @@ def _template_path_for_export(
         db,
         template_id,
         current_user.id if current_user else None,
+        project_id=report.project_id,
     )
     return template_context.file_path if template_context else None
 
@@ -290,8 +308,15 @@ def _load_report(report_id: int, db: Session) -> Report:
 
 
 def _ensure_report_access(report: Report, user: User | None) -> None:
+    if user is None:
+        if report.user_id is not None or report.project_id is not None:
+            raise PermissionDeniedError()
+        return
     if user is not None and report.user_id not in {None, user.id}:
         raise PermissionDeniedError()
+    if report.project_id is not None:
+        if user is None or report.project is None or report.project.user_id != user.id:
+            raise PermissionDeniedError()
 
 
 def _report_content(report: Report, render_template: bool = True) -> ReportContent:
@@ -326,6 +351,8 @@ def _report_read(report: Report) -> ReportRead:
     return ReportRead(
         id=report.id,
         user_id=report.user_id,
+        project_id=report.project_id,
+        project=project_to_reference(report.project),
         template_id=report.template_id,
         report_type=report.report_type,
         title=report.title,
@@ -340,6 +367,7 @@ def _report_summary(report: Report) -> ReportSummary:
     content = _report_content(report, render_template=False)
     return ReportSummary(
         id=report.id,
+        project_id=report.project_id,
         report_type=report.report_type,
         title=report.title,
         report_date=report.report_date,
