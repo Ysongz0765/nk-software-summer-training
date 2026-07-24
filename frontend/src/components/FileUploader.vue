@@ -5,20 +5,17 @@ import type { UploadUserFile } from 'element-plus';
 import { computed, ref } from 'vue';
 
 import { http } from '@/api/http';
-import type { ApiResponse, FileUploadResult, OCRResult } from '@/types/reportflow';
+import type { ApiResponse, FileUploadResult } from '@/types/reportflow';
 
 const emit = defineEmits<{
   (e: 'uploaded', result: FileUploadResult): void;
   (e: 'cleared'): void;
-  (e: 'ocr-result', result: OCRResult): void;
-  (e: 'ocr-loading', loading: boolean): void;
   (e: 'all-uploaded', results: FileUploadResult[]): void;
 }>();
 const props = defineProps<{ projectId?: number | null }>();
 
 const fileList = ref<UploadUserFile[]>([]);
 const uploading = ref(false);
-const ocrLoading = ref(false);
 const uploadedResults = ref<FileUploadResult[]>([]);
 const uploadProgress = ref({ current: 0, total: 0 });
 
@@ -56,7 +53,6 @@ async function handleUpload() {
       if (res.data.code === 0 && res.data.data) {
         uploadedResults.value.push(res.data.data);
         emit('uploaded', res.data.data);
-        await doOCR(res.data.data.file_id);
       } else {
         ElMessage.error(`${item.name} 上传失败`);
       }
@@ -72,19 +68,6 @@ async function handleUpload() {
   ElMessage.success(`成功上传 ${uploadedResults.value.length}/${fileList.value.length} 个文件`);
 }
 
-async function doOCR(fileId: string) {
-  ocrLoading.value = true;
-  emit('ocr-loading', true);
-  try {
-    const res = await http.post<ApiResponse<OCRResult>>('/ocr/recognize', { file_path: fileId });
-    if (res.data.code === 0 && res.data.data) emit('ocr-result', res.data.data);
-  } catch {
-    /* OCR 识别失败不阻塞流程 */
-  } finally {
-    ocrLoading.value = false;
-    emit('ocr-loading', false);
-  }
-}
 
 function resetUploadedState() {
   uploadedResults.value = [];
@@ -148,9 +131,6 @@ defineExpose({ clearFiles });
       >
         ✓ {{ result.original_name || result.file_id }}
       </el-tag>
-    </div>
-    <div v-if="ocrLoading" style="margin-top: 8px">
-      <el-alert type="info" :closable="false" title="OCR 识别中..." show-icon />
     </div>
   </div>
 </template>

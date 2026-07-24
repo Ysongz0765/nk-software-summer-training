@@ -3,6 +3,7 @@ import type {
   ApiResponse,
   AuthResponse,
   ExportResult,
+  FileTextResult,
   FileUploadResult,
   HealthStatus,
   MissingInformationRequest,
@@ -72,6 +73,11 @@ export async function getFileInfo(
   fileId: string,
 ): Promise<ApiResponse<{ file_id: string; path: string }>> {
   const response = await http.get(`/files/${fileId}`);
+  return response.data;
+}
+
+export async function extractFileText(fileId: string): Promise<ApiResponse<FileTextResult>> {
+  const response = await http.get<ApiResponse<FileTextResult>>(`/files/${fileId}/text`);
   return response.data;
 }
 

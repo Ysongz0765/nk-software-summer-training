@@ -14,6 +14,7 @@ from app.core.exceptions import ResourceNotFoundError, UnsupportedFileTypeError
 from app.models.file import UploadedFile
 from app.models.user import User
 from app.schemas.common import ApiResponse
+from app.services.file_text import extract_file_text
 from app.services.project_context import ensure_project_access, touch_project
 
 router = APIRouter()
@@ -75,6 +76,31 @@ async def upload_file(
             "file_type": record.file_type,
             "file_size": record.file_size,
             "storage_path": record.storage_path,
+        }
+    )
+
+
+@router.get("/{file_id}/text", response_model=ApiResponse[dict[str, object]])
+async def get_file_text(
+    file_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User | None, Depends(get_optional_current_user)],
+) -> ApiResponse[dict[str, object]]:
+    settings = get_settings()
+    record = _get_file_record(file_id, db)
+    _ensure_file_access(record, db, current_user)
+    stored_name = record.stored_name if record else file_id
+    file_path = Path(settings.storage_root) / "uploads" / stored_name
+    if not file_path.exists():
+        raise ResourceNotFoundError()
+    text = extract_file_text(file_path)
+    return ApiResponse(
+        data={
+            "file_id": stored_name,
+            "record_id": record.id if record else None,
+            "original_name": record.original_name if record else stored_name,
+            "file_type": file_path.suffix.lower().removeprefix("."),
+            "text": text,
         }
     )
 

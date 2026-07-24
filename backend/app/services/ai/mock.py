@@ -80,6 +80,12 @@ class MockAIReportService(AIReportService):
         problems = _string_list_from_source(request.source_data, "problems")
         solutions = _string_list_from_source(request.source_data, "solutions")
         next_plan = _string_list_from_source(request.source_data, "next_plan")
+        revision_instruction_value = get_source_value(request.source_data, "revision_instruction")
+        revision_instruction = (
+            revision_instruction_value.strip()
+            if isinstance(revision_instruction_value, str)
+            else ""
+        )
 
         if not problems:
             problems = [
@@ -125,6 +131,12 @@ class MockAIReportService(AIReportService):
             style=request.style,
         )
         rendered_template = _render_template_body(request, report)
+        if revision_instruction:
+            report.summary = f"{report.summary} Revision request: {revision_instruction}"
+            report.custom_fields["revision_instruction"] = revision_instruction
+            report.custom_fields["regeneration_index"] = request.source_data.get(
+                "regeneration_index"
+            )
         if rendered_template:
             report.custom_fields["rendered_template"] = rendered_template
         return report

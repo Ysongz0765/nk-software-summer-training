@@ -9,10 +9,12 @@ import {
   checkMissingInfo,
   createReport,
   createTemplate,
+  extractFileText,
   extractTasks,
   generateReport,
   getProjectContext,
   listTemplates,
+  recognizeFile,
   uploadFile,
 } from '@/api/reportflow';
 import FileUploader from '@/components/FileUploader.vue';
@@ -22,7 +24,6 @@ import { useAppStore } from '@/stores/app';
 import type {
   FileUploadResult,
   MissingInformationResult,
-  OCRResult,
   ProjectContext,
   ReportContent,
   TaskItem,
@@ -129,6 +130,9 @@ function removeEvidenceFile(field: string, index: number) {
 const report = ref<ReportContent | null>(null);
 const generating = ref(false);
 const saving = ref(false);
+const regenerateDialogVisible = ref(false);
+const regenerationInstruction = ref('');
+const regenerationCount = ref(0);
 const reportTitle = ref('');
 const reportDate = ref(new Date().toISOString().slice(0, 10));
 const style = ref('concise');
@@ -153,6 +157,19 @@ const contextSummary = computed(() => {
     blocked: projectContext.value.blocked_tasks.length,
   };
 });
+
+interface UploadedSourceText {
+  file_id: string;
+  original_name: string;
+  file_type: string;
+  source: 'text' | 'ocr';
+  text: string;
+  pages?: number;
+  confidence?: number;
+}
+
+const TEXT_READ_FILE_TYPES = new Set(['txt', 'docx', 'xlsx']);
+const OCR_FILE_TYPES = new Set(['png', 'jpg', 'jpeg']);
 
 onMounted(async () => {
   await appStore.refreshProjects();
@@ -271,26 +288,32 @@ function onUploadCleared() {
   void loadProjectContext();
 }
 
-function onOCRResult(result: OCRResult) {
-  ocrTexts.value = [...ocrTexts.value, result.text];
-  manualText.value = [manualText.value, result.text].filter(Boolean).join('\n');
-}
-
-function onOCRLoading(value: boolean) {
-  ocrLoading.value = value;
-}
-
 async function doExtract() {
-  if (!sourceText.value) return;
+  if (!hasSourceMaterial.value) return;
   extracting.value = true;
   try {
+    const uploadedSourceTexts = await readUploadedFileTexts();
+    const sourceForExtraction = [
+      ...uploadedSourceTexts.map((result) => result.text),
+      manualText.value,
+    ]
+      .filter((text) => text.trim())
+      .join('\n');
+
+    if (!sourceForExtraction.trim()) {
+      tasks.value = [];
+      ElMessage.warning('未识别到可用于任务提取的文本，可以手动补充工作内容');
+      return;
+    }
+
     const response = await extractTasks({
-      source_text: sourceText.value,
+      source_text: sourceForExtraction,
       report_type: reportType.value,
       context: {
         project_id: projectId.value,
         project_context: projectContext.value,
         uploaded_files: uploadedFiles.value,
+        source_texts: uploadedSourceTexts,
         evidence_files: evidenceFiles.value,
         template_id: templateId.value,
         template_fields: selectedTemplateFields.value,
@@ -305,7 +328,94 @@ async function doExtract() {
   }
 }
 
-async function doCheckMissing() {
+async function readUploadedFileTexts(): Promise<UploadedSourceText[]> {
+  if (!uploadedFiles.value.length) {
+    ocrTexts.value = [];
+    return [];
+  }
+
+  ocrLoading.value = true;
+  try {
+    const results = await Promise.all(
+      uploadedFiles.value.map((file) => readUploadedFileText(file)),
+    );
+    const readableResults = results.filter((result): result is UploadedSourceText =>
+      Boolean(result?.text.trim()),
+    );
+    ocrTexts.value = readableResults.map((result) => result.text);
+    return readableResults;
+  } finally {
+    ocrLoading.value = false;
+  }
+}
+
+async function readUploadedFileText(file: FileUploadResult): Promise<UploadedSourceText | null> {
+  const fileType = normalizeFileType(file);
+  if (TEXT_READ_FILE_TYPES.has(fileType)) {
+    return extractUploadedFileText(file);
+  }
+  if (fileType === 'pdf') {
+    const textResult = await extractUploadedFileText(file, false);
+    if (textResult?.text.trim()) return textResult;
+    return recognizeUploadedFile(file);
+  }
+  if (OCR_FILE_TYPES.has(fileType)) {
+    return recognizeUploadedFile(file);
+  }
+
+  ElMessage.warning((file.original_name || file.file_id) + ' is not supported for automatic reading yet, skipped');
+  return null;
+}
+
+async function extractUploadedFileText(
+  file: FileUploadResult,
+  warnOnFailure = true,
+): Promise<UploadedSourceText | null> {
+  try {
+    const response = await extractFileText(file.file_id);
+    const data = response.data;
+    if (!data?.text.trim()) return null;
+    return {
+      file_id: data.file_id,
+      original_name: data.original_name,
+      file_type: data.file_type,
+      source: 'text',
+      text: data.text,
+    };
+  } catch {
+    if (warnOnFailure) {
+      ElMessage.warning((file.original_name || file.file_id) + ' text extraction failed, skipped');
+    }
+    return null;
+  }
+}
+
+async function recognizeUploadedFile(file: FileUploadResult): Promise<UploadedSourceText | null> {
+  try {
+    const response = await recognizeFile(file.file_id);
+    const data = response.data;
+    if (!data?.text.trim()) return null;
+    return {
+      file_id: file.file_id,
+      original_name: file.original_name || file.file_id,
+      file_type: normalizeFileType(file),
+      source: 'ocr',
+      text: data.text,
+      pages: data.pages,
+      confidence: data.confidence,
+    };
+  } catch {
+    ElMessage.warning((file.original_name || file.file_id) + ' OCR failed, skipped');
+    return null;
+  }
+}
+
+function normalizeFileType(file: FileUploadResult): string {
+  const fromType = file.file_type?.trim().toLowerCase();
+  if (fromType) return fromType;
+  const name = file.original_name || file.file_id;
+  return name.includes('.') ? name.split('.').pop()?.toLowerCase() || '' : '';
+}async function doCheckMissing() {
   checking.value = true;
   try {
     const response = await checkMissingInfo({
@@ -334,8 +444,12 @@ async function goMissingStep() {
   step.value = 2;
 }
 
-async function doGenerate() {
+async function doGenerate(revisionInstruction = '') {
   generating.value = true;
+  const revisionInstructionText = revisionInstruction.trim();
+  const nextRegenerationIndex = revisionInstructionText
+    ? regenerationCount.value + 1
+    : regenerationCount.value;
   try {
     const response = await generateReport({
       report_type: reportType.value,
@@ -360,9 +474,16 @@ async function doGenerate() {
         ocr_text: ocrText.value,
         template_fields: selectedTemplateFields.value,
         evidence_files: evidenceFiles.value,
+        previous_report: revisionInstructionText ? report.value : null,
+        revision_instruction: revisionInstructionText,
+        regeneration_index: nextRegenerationIndex,
       },
     });
     report.value = response.data;
+    if (revisionInstructionText) {
+      regenerationCount.value = nextRegenerationIndex;
+      regenerationInstruction.value = '';
+    }
   } catch (error) {
     report.value = null;
     ElMessage.error(error instanceof Error ? error.message : '报表生成失败');
@@ -374,6 +495,20 @@ async function doGenerate() {
 async function goPreviewStep() {
   step.value = 3;
   await doGenerate();
+}
+
+function openRegenerateDialog() {
+  regenerationInstruction.value = '';
+  regenerateDialogVisible.value = true;
+}
+
+async function confirmRegenerate() {
+  if (!regenerationInstruction.value.trim()) {
+    ElMessage.warning('请先输入修改意见');
+    return;
+  }
+  regenerateDialogVisible.value = false;
+  await doGenerate(regenerationInstruction.value);
 }
 
 async function saveAndEdit() {
@@ -477,8 +612,6 @@ async function saveAndEdit() {
           :project-id="projectId"
           @uploaded="onUploaded"
           @cleared="onUploadCleared"
-          @ocr-result="onOCRResult"
-          @ocr-loading="onOCRLoading"
         />
         <el-divider>或直接输入文本</el-divider>
         <el-input
@@ -511,7 +644,7 @@ async function saveAndEdit() {
               type="primary"
               :loading="extracting"
               :icon="MagicStick"
-              :disabled="!sourceText"
+              :disabled="!hasSourceMaterial"
               @click="doExtract"
             >
               AI 提取任务
@@ -703,7 +836,7 @@ async function saveAndEdit() {
         <div class="step-actions between">
           <el-button :icon="ArrowLeft" @click="step = 2">上一步</el-button>
           <div class="inline-actions">
-            <el-button @click="doGenerate">重新生成</el-button>
+            <el-button @click="openRegenerateDialog">重新生成</el-button>
             <el-button type="primary" :icon="Check" :loading="saving" @click="saveAndEdit">
               保存并进入在线编辑
             </el-button>
@@ -712,6 +845,28 @@ async function saveAndEdit() {
       </div>
       <el-empty v-else description="报表生成失败，请返回上一步重试。" />
     </div>
+
+    <el-dialog
+      v-model="regenerateDialogVisible"
+      title="填写修改意见"
+      width="560px"
+      :close-on-click-modal="!generating"
+    >
+      <el-input
+        v-model="regenerationInstruction"
+        type="textarea"
+        :rows="5"
+        maxlength="800"
+        show-word-limit
+        placeholder="例如：把总结写得更正式，问题与风险补充到两条，下一步计划改成按时间顺序。"
+      />
+      <template #footer>
+        <el-button @click="regenerateDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="generating" @click="confirmRegenerate">
+          根据意见重新生成
+        </el-button>
+      </template>
+    </el-dialog>
   </section>
 </template>
 

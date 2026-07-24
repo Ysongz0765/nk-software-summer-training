@@ -116,6 +116,14 @@ export interface FileUploadResult {
   storage_path?: string;
 }
 
+export interface FileTextResult {
+  file_id: string;
+  record_id?: number | null;
+  original_name: string;
+  file_type: string;
+  text: string;
+}
+
 export interface OCRResult {
   text: string;
   pages: number;

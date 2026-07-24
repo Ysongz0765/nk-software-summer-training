@@ -22,6 +22,15 @@ DEEPSEEK_DEFAULT_BASE_URL = "https://api.deepseek.com"
 DEEPSEEK_DEFAULT_MODEL = "deepseek-v4-flash"
 JSON_OBJECT_RESPONSE = {"type": "json_object"}
 TASK_LIST_ADAPTER = TypeAdapter(list[TaskItem])
+REVISION_MODE_PROMPT = """
+Revision mode:
+- If source_data.revision_instruction is a non-empty string, revise source_data.previous_report
+  according to that instruction instead of generating from scratch.
+- Preserve report facts, task statuses, report_type, and date unless the instruction explicitly
+  asks to change them.
+- Reflect the requested changes in summary, problems, solutions, next_plan, and custom_fields when
+  relevant.
+""".strip()
 
 JsonObject = dict[str, object]
 
@@ -90,7 +99,7 @@ class DeepSeekAIReportService(AIReportService):
 
     async def generate_report(self, request: ReportGenerationRequest) -> ReportContent:
         payload = await self._chat_json(
-            system_prompt=_REPORT_GENERATION_SYSTEM_PROMPT,
+            system_prompt=f"{_REPORT_GENERATION_SYSTEM_PROMPT}\n\n{REVISION_MODE_PROMPT}",
             user_prompt=json.dumps(request.model_dump(mode="json"), ensure_ascii=False),
         )
         raw_report = payload.get("report")
