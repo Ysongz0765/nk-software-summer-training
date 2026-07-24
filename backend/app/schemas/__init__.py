@@ -17,6 +17,8 @@ from app.schemas.project import (
 )
 from app.schemas.report import (
     ExportResult,
+    GitHubProgressAnalysisRequest,
+    GitHubProgressAnalysisResult,
     MissingInformationResult,
     OCRResult,
     ReportContent,
@@ -36,6 +38,8 @@ __all__ = [
     "ApiResponse",
     "AuthResponse",
     "ExportResult",
+    "GitHubProgressAnalysisRequest",
+    "GitHubProgressAnalysisResult",
     "LoginRequest",
     "MissingInformationResult",
     "OCRResult",

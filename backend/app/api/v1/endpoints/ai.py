@@ -6,11 +6,14 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_optional_current_user
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.models.user import User
 from app.repositories.project import ProjectRepository
 from app.schemas.common import ApiResponse
 from app.schemas.report import (
+    GitHubProgressAnalysisRequest,
+    GitHubProgressAnalysisResult,
     MissingInformationRequest,
     MissingInformationResult,
     ReportContent,
@@ -20,6 +23,7 @@ from app.schemas.report import (
 )
 from app.services.ai.base import AIReportService
 from app.services.ai.factory import get_ai_report_service
+from app.services.github_progress import GitHubProgressService, format_github_progress_snapshot
 from app.services.project_context import (
     build_ai_project_context,
     ensure_project_access,
@@ -38,6 +42,45 @@ async def extract_tasks(
 ) -> ApiResponse[list[TaskItem]]:
     tasks = await ai_service.extract_tasks(payload)
     return ApiResponse(data=tasks)
+
+
+@router.post("/analyze-github-progress", response_model=ApiResponse[GitHubProgressAnalysisResult])
+async def analyze_github_progress(
+    payload: GitHubProgressAnalysisRequest,
+    ai_service: Annotated[AIReportService, Depends(get_ai_report_service)],
+) -> ApiResponse[GitHubProgressAnalysisResult]:
+    settings = get_settings()
+    github_service = GitHubProgressService(
+        api_token=settings.github_api_token,
+        base_url=settings.github_api_base_url,
+        timeout_seconds=settings.github_timeout_seconds,
+    )
+    snapshot = await github_service.fetch_progress_snapshot(
+        payload.repo_url,
+        max_items=payload.max_items,
+    )
+    source_text = format_github_progress_snapshot(snapshot)
+    repository = snapshot.get("repository") if isinstance(snapshot.get("repository"), dict) else {}
+    tasks = await ai_service.extract_tasks(
+        TaskExtractionInput(
+            source_text=source_text,
+            report_type=payload.report_type,
+            context={
+                "source": "github_api",
+                "repo_url": payload.repo_url,
+                "repository": repository,
+            },
+        )
+    )
+    tasks = [task.model_copy(update={"source": "github"}) for task in tasks]
+    return ApiResponse(
+        data=GitHubProgressAnalysisResult(
+            repo_url=payload.repo_url,
+            repository=repository,
+            source_text=source_text,
+            tasks=tasks,
+        )
+    )
 
 
 @router.post("/check-missing", response_model=ApiResponse[MissingInformationResult])

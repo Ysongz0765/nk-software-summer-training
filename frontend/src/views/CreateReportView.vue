@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ArrowLeft, ArrowRight, Check, MagicStick, Plus } from '@element-plus/icons-vue';
+import { ArrowLeft, ArrowRight, Check, Link, MagicStick, Plus } from '@element-plus/icons-vue';
 import { isAxiosError } from 'axios';
 import { ElMessage } from 'element-plus';
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import {
+  analyzeGitHubProgress,
   checkMissingInfo,
   createReport,
   createTemplate,
@@ -52,7 +53,12 @@ const ocrTexts = ref<string[]>([]);
 const ocrText = computed(() => ocrTexts.value.join('\n'));
 const ocrLoading = ref(false);
 const manualText = ref('');
-const sourceText = computed(() => [ocrText.value, manualText.value].filter(Boolean).join('\n'));
+const githubRepoUrl = ref('');
+const githubAnalysisText = ref('');
+const githubAnalyzing = ref(false);
+const sourceText = computed(() =>
+  [ocrText.value, githubAnalysisText.value, manualText.value].filter(Boolean).join('\n'),
+);
 const hasSourceMaterial = computed(() =>
   Boolean(sourceText.value.trim() || uploadedFiles.value.length),
 );
@@ -170,6 +176,39 @@ interface UploadedSourceText {
 
 const TEXT_READ_FILE_TYPES = new Set(['txt', 'docx', 'xlsx']);
 const OCR_FILE_TYPES = new Set(['png', 'jpg', 'jpeg']);
+
+async function analyzeGitHubRepository() {
+  const repoUrl = githubRepoUrl.value.trim();
+  if (!repoUrl) {
+    ElMessage.warning('请输入 GitHub 仓库地址');
+    return;
+  }
+
+  githubAnalyzing.value = true;
+  try {
+    const response = await analyzeGitHubProgress({
+      repo_url: repoUrl,
+      report_type: reportType.value,
+      max_items: 10,
+    });
+    const data = response.data;
+    if (!data) {
+      ElMessage.error(response.message || 'GitHub 项目进度分析失败');
+      return;
+    }
+
+    githubAnalysisText.value = data.source_text;
+    if (data.tasks.length) {
+      tasks.value = data.tasks.map((task) => ({ ...task, user_confirmed: false }));
+      step.value = 1;
+    }
+    ElMessage.success(`已分析 GitHub 仓库，识别 ${data.tasks.length} 项任务`);
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : 'GitHub 项目进度分析失败');
+  } finally {
+    githubAnalyzing.value = false;
+  }
+}
 
 onMounted(async () => {
   await appStore.refreshProjects();
@@ -295,6 +334,7 @@ async function doExtract() {
     const uploadedSourceTexts = await readUploadedFileTexts();
     const sourceForExtraction = [
       ...uploadedSourceTexts.map((result) => result.text),
+      githubAnalysisText.value,
       manualText.value,
     ]
       .filter((text) => text.trim())
@@ -314,6 +354,8 @@ async function doExtract() {
         project_context: projectContext.value,
         uploaded_files: uploadedFiles.value,
         source_texts: uploadedSourceTexts,
+        github_repo_url: githubRepoUrl.value,
+        github_analysis_text: githubAnalysisText.value,
         evidence_files: evidenceFiles.value,
         template_id: templateId.value,
         template_fields: selectedTemplateFields.value,
@@ -427,6 +469,8 @@ function normalizeFileType(file: FileUploadResult): string {
         answers: answers.value,
         project_context: projectContext.value,
         uploaded_files: uploadedFiles.value,
+        github_repo_url: githubRepoUrl.value,
+        github_analysis_text: githubAnalysisText.value,
         evidence_files: evidenceFiles.value,
       },
     });
@@ -472,6 +516,8 @@ async function doGenerate(revisionInstruction = '') {
         project_context: projectContext.value,
         uploaded_files: uploadedFiles.value,
         ocr_text: ocrText.value,
+        github_repo_url: githubRepoUrl.value,
+        github_analysis_text: githubAnalysisText.value,
         template_fields: selectedTemplateFields.value,
         evidence_files: evidenceFiles.value,
         previous_report: revisionInstructionText ? report.value : null,
@@ -526,6 +572,8 @@ async function saveAndEdit() {
         answers: answers.value,
         project_context: projectContext.value,
         uploaded_files: uploadedFiles.value,
+        github_repo_url: githubRepoUrl.value,
+        github_analysis_text: githubAnalysisText.value,
         evidence_files: evidenceFiles.value,
         template_fields: selectedTemplateFields.value,
       },
@@ -612,6 +660,33 @@ async function saveAndEdit() {
           :project-id="projectId"
           @uploaded="onUploaded"
           @cleared="onUploadCleared"
+        />
+        <el-divider>GitHub 仓库分析</el-divider>
+        <div class="github-input-row">
+          <el-input
+            v-model="githubRepoUrl"
+            placeholder="https://github.com/owner/repo"
+            :prefix-icon="Link"
+            :disabled="githubAnalyzing"
+            clearable
+            @keyup.enter="analyzeGitHubRepository"
+          />
+          <el-button
+            type="primary"
+            :icon="MagicStick"
+            :loading="githubAnalyzing"
+            :disabled="!githubRepoUrl.trim()"
+            @click="analyzeGitHubRepository"
+          >
+            分析仓库
+          </el-button>
+        </div>
+        <el-alert
+          v-if="githubAnalysisText"
+          type="success"
+          :closable="false"
+          title="GitHub 项目进度已加入本次报告素材"
+          style="margin-top: 12px"
         />
         <el-divider>或直接输入文本</el-divider>
         <el-input
@@ -922,6 +997,11 @@ async function saveAndEdit() {
   gap: 8px;
 }
 
+.github-input-row {
+  display: flex;
+  gap: 8px;
+}
+
 .evidence-area {
   display: flex;
   flex-direction: column;
@@ -945,5 +1025,11 @@ async function saveAndEdit() {
   margin-top: 14px;
   color: #475467;
   font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .github-input-row {
+    flex-direction: column;
+  }
 }
 </style>

@@ -27,6 +27,16 @@ class Settings(BaseSettings):
 
     storage_root: str = Field(default="./storage", alias="STORAGE_ROOT")
     ocr_provider: str = Field(default="mock", alias="OCR_PROVIDER")
+    qwen_api_key: str | None = Field(default=None, alias="QWEN_API_KEY")
+    qwen_base_url: str = Field(
+        default="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        alias="QWEN_BASE_URL",
+    )
+    qwen_vision_model: str = Field(default="qwen3-vl-plus", alias="QWEN_VISION_MODEL")
+    qwen_timeout_seconds: float = Field(default=60.0, alias="QWEN_TIMEOUT_SECONDS")
+    github_api_token: str | None = Field(default=None, alias="GITHUB_API_TOKEN")
+    github_api_base_url: str = Field(default="https://api.github.com", alias="GITHUB_API_BASE_URL")
+    github_timeout_seconds: float = Field(default=30.0, alias="GITHUB_TIMEOUT_SECONDS")
     ai_provider: str = Field(default="mock", alias="AI_PROVIDER")
     ai_api_key: str | None = Field(default=None, alias="AI_API_KEY")
     ai_base_url: str | None = Field(default=None, alias="AI_BASE_URL")

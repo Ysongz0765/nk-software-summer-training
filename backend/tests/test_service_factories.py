@@ -10,6 +10,7 @@ from app.services.ai.mock import MockAIReportService
 from app.services.ocr.factory import create_ocr_service
 from app.services.ocr.mock import MockOCRService
 from app.services.ocr.paddle import PaddleOCRService
+from app.services.ocr.qwen import QwenVisionOCRService
 
 
 def test_ai_factory_returns_mock_provider() -> None:
@@ -50,6 +51,22 @@ def test_ocr_factory_returns_paddle_provider() -> None:
     service = create_ocr_service(Settings(ocr_provider="paddle"))
 
     assert isinstance(service, PaddleOCRService)
+
+
+def test_ocr_factory_returns_qwen_provider() -> None:
+    service = create_ocr_service(
+        Settings(
+            ocr_provider="qwen",
+            qwen_api_key="sk-placeholder",
+        )
+    )
+
+    assert isinstance(service, QwenVisionOCRService)
+
+
+def test_ocr_factory_rejects_qwen_without_api_key() -> None:
+    with pytest.raises(OCRServiceUnavailableError):
+        create_ocr_service(Settings(ocr_provider="qwen", qwen_api_key="", ai_api_key=""))
 
 
 def test_ocr_factory_rejects_unsupported_provider() -> None:

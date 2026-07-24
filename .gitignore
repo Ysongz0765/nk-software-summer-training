@@ -38,6 +38,7 @@ backend/storage/templates/*
 backend/storage/exports/*
 backend/storage/temp/*
 !backend/storage/**/.gitkeep
+backend/reportflow-preview.sqlite
 
 # IDE and OS
 .idea/

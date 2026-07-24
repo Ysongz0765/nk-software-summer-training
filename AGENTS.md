@@ -6,15 +6,15 @@ ReportFlow AI 是一个面向日报、周报生成的网页平台，采用前后
 
 设计目标中的主要数据流：
 
-用户输入或截图
-→ OCR识别
+用户输入、截图或 GitHub 仓库地址
+→ OCR识别 / GitHub API 项目活动抓取
 → 任务提取
 → 信息补充
 → 报表内容生成
 → 在线编辑
 → Word、Excel、PDF导出
 
-当前代码中，OCR、AI、模板和导出模块已有可替换接口与 Mock 实现，但真实 OCR、真实 AI 服务、完整在线编辑和 Word、Excel、PDF 导出尚未完成。所有核心模块应围绕统一的 `TaskItem` 和 `ReportContent` 数据结构交互。
+当前代码中，OCR、AI、模板、GitHub 项目进度分析和导出模块已有可替换接口与 Mock 或真实 provider 实现。Qwen 多模态 OCR、DeepSeek AI、PaddleOCR 和 GitHub API 聚合已接入；所有核心模块应围绕统一的 `TaskItem` 和 `ReportContent` 数据结构交互。
 
 ## 2. 技术栈
 
@@ -70,8 +70,9 @@ ReportFlow AI 是一个面向日报、周报生成的网页平台，采用前后
 
 - `backend/app/services/ocr`
 - `backend/app/services/ai`
+- `backend/app/services/github_progress.py`
 - `backend/app/prompts`
-- OCR、任务提取、补充追问和内容生成
+- OCR、GitHub 项目进度分析、任务提取、补充追问和内容生成
 
 成员D：
 
@@ -97,6 +98,7 @@ ReportFlow AI 是一个面向日报、周报生成的网页平台，采用前后
 - 配置统一从环境变量读取，入口为 `backend/app/core/config.py`。
 - 文件存储在 `storage` 目录，数据库只保存路径和元数据。
 - AI、OCR、模板、导出模块需要保留可替换接口。
+- GitHub API 聚合逻辑放在 service 层，路由层只负责参数接收和调用 AI 服务。
 - 未配置真实 AI 服务时必须能够使用 Mock 实现。
 - 不要在代码中硬编码密钥、密码或绝对路径。
 
@@ -242,6 +244,7 @@ make logs
 - 修改 AI、OCR、模板或导出模块时测试 Mock 实现。
 - 修复缺陷时尽量增加回归测试。
 - 默认自动化测试不应依赖真实 AI 密钥。
+- 默认自动化测试不应依赖真实 GitHub token 或真实外部 API，外部调用用 service 单元测试、mock client 或显式集成测试隔离。
 - 默认自动化测试不应依赖真实 MySQL 服务，除非显式执行集成测试。
 - 不得声称未实际运行的测试已经通过。
 
@@ -300,7 +303,7 @@ make logs
 
 - FastAPI 应用骨架，入口为 `backend/app/main.py`。
 - `/api/v1` 路由聚合和 `GET /api/v1/health`。
-- 文件、OCR、AI、模板、报表、导出模块的基础 API 路由。
+- 文件、OCR、AI、GitHub 项目进度分析、模板、报表、导出模块的基础 API 路由。
 - `TaskItem`、`ReportContent`、统一 `ApiResponse` 等 Pydantic Schema。
 - SQLAlchemy 2 模型、Repository 基类和 `ReportRepository` 示例。
 - Alembic 初始迁移 `backend/alembic/versions/0001_initial_schema.py`。
@@ -308,6 +311,9 @@ make logs
 - Vue 3 + TypeScript + Vite 前端骨架。
 - Vue Router、Pinia、Axios、Element Plus 配置。
 - Docker Compose 中的 `mysql`、`backend`、`frontend`、`nginx` 服务配置。
+- DeepSeek provider 已接入 AI 任务提取、信息检查和报表生成。
+- Qwen 多模态 OCR provider 已接入截图识别流程。
+- GitHub API → DeepSeek 项目进度分析已接入创建报表流程。
 
 Mock实现：
 
@@ -320,12 +326,11 @@ Mock实现：
 
 尚未完成：
 
-- 真实 OCR 接入。
-- 真实 AI 服务接入。
 - 完整认证、权限和用户体系。
 - 完整在线富文本编辑器体验。
 - 完整 Word、Excel、PDF 模板解析和导出。
 - 生产级文件存储、病毒扫描和审计日志。
+- 生产级 GitHub webhook、增量同步和私有仓库授权管理。
 
 当前可运行命令：
 
@@ -339,7 +344,8 @@ Mock实现：
 
 已知风险：
 
-- 当前多个核心业务模块仍是 Mock，占位接口不能当作真实业务能力。
+- 当前仍保留 Mock provider，演示环境需确认 `.env` 是否启用真实 provider。
 - Docker 命令依赖本机安装 Docker CLI 和 Docker Engine。
 - MySQL 密码需要通过 `.env` 配置，不能提交真实值。
+- DeepSeek、Qwen 和 GitHub token 均不得提交；外部模型权限和 API 限流会影响真实分析结果。
 - 前端生产构建可能因 Element Plus 等依赖产生较大 chunk，需要后续按页面或组件拆分优化。

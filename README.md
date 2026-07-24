@@ -1,14 +1,16 @@
 # ReportFlow AI
 
-ReportFlow AI 是一个网页端智能报表生成平台骨架，用于生成、编辑和导出项目日报、周报等内容。当前仓库重点提供公共基础设施、后端架构、前端骨架、Mock 服务和团队协作边界。
+ReportFlow AI 是一个网页端智能报表生成平台，用于从文本、截图、文件和 GitHub 仓库活动中提取项目进度，并生成、编辑、保存和导出日报、周报等内容。当前仓库提供 FastAPI 后端、Vue 3 前端、MySQL/Alembic 数据层、Mock 服务、真实 AI/OCR provider 和 Docker Compose 开发环境。
 
 ## 核心功能
 
 - 文件上传、OCR、AI 抽取、模板解析、报表生成和导出的 API 边界。
+- 支持 Qwen 多模态模型识别微信聊天记录、Git 截图、终端/IDE 截图等工作素材。
+- 支持填写 GitHub 仓库地址，通过 GitHub API 拉取提交、PR、Issue 和语言统计，再交给 DeepSeek 分析项目进度。
 - 项目空间：按项目隔离文件、任务、成员、模板、报表和 AI 生成上下文。
 - 统一 `TaskItem` 与 `ReportContent` 数据结构。
 - FastAPI 后端、Vue 3 前端、MySQL 8.4、Alembic 和 Docker Compose 开发环境。
-- 无真实 AI 密钥时可通过 Mock 服务运行。
+- 无真实 AI/OCR 密钥时可通过 Mock 服务运行。
 
 ## 技术栈
 
@@ -153,7 +155,7 @@ AI_PROVIDER=mock
 OCR_PROVIDER=mock
 ```
 
-接入 DeepSeek 和 PaddleOCR 图片识别时，在本地 `.env` 中配置：
+接入 DeepSeek 和 Qwen 多模态截图识别时，在本地 `.env` 中配置：
 
 ```env
 AI_PROVIDER=deepseek
@@ -162,10 +164,26 @@ AI_BASE_URL=https://api.deepseek.com
 AI_MODEL=deepseek-chat
 AI_TIMEOUT_SECONDS=60
 
+OCR_PROVIDER=qwen
+QWEN_API_KEY=sk-placeholder
+QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+QWEN_VISION_MODEL=qwen3-vl-plus
+QWEN_TIMEOUT_SECONDS=60
+```
+
+`AI_API_KEY` 和 `QWEN_API_KEY` 只填写在本地 `.env`，不要提交真实密钥。Qwen provider 支持 `.png`、`.jpg`、`.jpeg` 图片和 `.pdf` 文件；PDF 会先按页渲染成临时图片再识别。若只需要本地 PaddleOCR，可继续使用：
+
+```env
 OCR_PROVIDER=paddle
 ```
 
-`AI_API_KEY` 只填写在本地 `.env`，不要提交真实密钥。当前 PaddleOCR 接入支持 `.png`、`.jpg`、`.jpeg` 图片和 `.pdf` 文件；PDF 会先按页渲染成临时图片再识别。
+GitHub 项目进度分析可直接读取公开仓库；私有仓库或更高限额需要配置 GitHub token：
+
+```env
+GITHUB_API_TOKEN=github_pat_placeholder
+GITHUB_API_BASE_URL=https://api.github.com
+GITHUB_TIMEOUT_SECONDS=30
+```
 
 OCR 联调可使用：
 
@@ -174,6 +192,14 @@ OCR 联调可使用：
 - `POST /api/v1/ocr/recognize-batch`：批量识别多个已上传文件。
 - `POST /api/v1/ocr/extract-tasks`：OCR 后直接调用 AI 提取任务。
 - `POST /api/v1/ocr/extract-tasks-upload`：上传文件后直接 OCR 并提取任务。
+- `POST /api/v1/ai/analyze-github-progress`：传 GitHub 仓库地址，执行 GitHub API → DeepSeek 项目进度分析。
+
+前端使用路径：
+
+1. 打开“创建报表”。
+2. 在第一步上传截图、填写 GitHub 仓库地址，或直接粘贴工作文本。
+3. 点击“分析仓库”或进入“AI 提取任务”，确认识别出的任务。
+4. 补充缺失信息后生成报表预览，并保存进入在线编辑。
 
 ## 测试方法
 
@@ -205,7 +231,8 @@ npm run lint
 - `GET /api/v1/health` 可返回服务状态。
 - 提供注册、登录、文件上传、OCR、AI、模板、报表、版本和导出 API。
 - 提供项目 CRUD、项目任务、项目成员、项目文件、项目上下文和 AI 项目摘要 API。
-- AI 服务已支持 DeepSeek provider，OCR 服务已支持 PaddleOCR 图片识别 provider 和 OCR+AI 联调接口。
+- AI 服务已支持 DeepSeek provider，OCR 服务已支持 PaddleOCR 和 Qwen 多模态 provider，以及 OCR+AI 联调接口。
+- AI 模块已支持 GitHub API → DeepSeek 项目进度分析接口，可从仓库活动中提取日报/周报任务。
 - 报表创建、列表、详情、更新、版本记录、删除和导出记录已接入数据库，并支持 `project_id` 绑定和项目筛选。
 - Word、PDF、Excel 和 JSON 导出已接入后端与前端入口。
 - SQLAlchemy 模型、Pydantic Schema、Alembic 配置已创建。
@@ -219,7 +246,7 @@ npm run lint
 1. 登录后进入“项目空间”，创建项目并填写项目类型、当前阶段、技术栈和背景摘要。
 2. 在项目详情中添加项目任务、成员分工，也可以上传项目文件。
 3. 切换顶部“当前项目”后，文件上传、模板库、历史报表和创建报表页面会默认使用该项目。
-4. 创建报表时可选择相关项目文件和项目任务；后端会构建 `project_context`，包含项目背景、成员、任务、文件、历史报表和项目记忆。
+4. 创建报表时可选择相关项目文件和项目任务，也可输入 GitHub 仓库地址分析近期提交、PR 和 Issue；后端会构建 `project_context`，包含项目背景、成员、任务、文件、历史报表和项目记忆。
 5. 保存报表时传入 `project_id`，报表、导出记录和项目最近活动时间会同步更新。
 6. 项目摘要接口 `POST /api/v1/projects/{project_id}/generate-summary` 当前返回 mock 建议，不会直接覆盖用户确认的背景。
 
@@ -232,8 +259,10 @@ npm run lint
 
 ## 常见问题
 
-- 本地没有 MySQL：优先使用 Docker Compose。
+- 本地没有 MySQL：优先使用 Docker Compose；临时预览也可把 `.env` 中 `DATABASE_URL` 改为本地 SQLite，例如 `sqlite+pysqlite:///./reportflow-preview.sqlite`，再执行 `alembic upgrade head`。
 - AI 接口返回 Mock：确认 `.env` 中 `AI_PROVIDER=mock`，当前阶段不需要真实密钥。
+- Qwen OCR 报模型无权限：确认 `QWEN_API_KEY` 所属百炼业务空间已开通 `QWEN_VISION_MODEL`，必要时改用已开通的视觉/OCR 模型。
+- GitHub 分析被限流或私有仓库无法访问：配置 `GITHUB_API_TOKEN`。
 - Windows 下 `make` 不可用：按 README 中的 PowerShell 命令逐步执行。
 - 数据库连接失败：检查 `.env` 中 `DATABASE_URL`、`MYSQL_*` 和 MySQL 容器健康状态。
 - 旧 PostgreSQL Docker Volume 不会自动迁移到 MySQL；确认备份无误后再手动清理。

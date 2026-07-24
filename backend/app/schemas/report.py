@@ -56,6 +56,19 @@ class TaskExtractionInput(BaseModel):
     context: dict[str, object] = Field(default_factory=dict)
 
 
+class GitHubProgressAnalysisRequest(BaseModel):
+    repo_url: str = Field(min_length=1, max_length=512)
+    report_type: str = "daily"
+    max_items: int = Field(default=10, ge=1, le=30)
+
+
+class GitHubProgressAnalysisResult(BaseModel):
+    repo_url: str
+    repository: dict[str, object] = Field(default_factory=dict)
+    source_text: str
+    tasks: list[TaskItem] = Field(default_factory=list)
+
+
 class MissingInformationResult(BaseModel):
     missing_fields: list[str] = Field(default_factory=list)
     questions: list[str] = Field(default_factory=list)

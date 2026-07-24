@@ -151,6 +151,19 @@ export interface TaskExtractionRequest {
   context?: Record<string, unknown>;
 }
 
+export interface GitHubProgressAnalysisRequest {
+  repo_url: string;
+  report_type: string;
+  max_items?: number;
+}
+
+export interface GitHubProgressAnalysisResult {
+  repo_url: string;
+  repository: Record<string, unknown>;
+  source_text: string;
+  tasks: TaskItem[];
+}
+
 export interface ReportGenerationRequest {
   report_type: string;
   title: string;

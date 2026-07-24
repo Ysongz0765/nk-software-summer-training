@@ -5,6 +5,8 @@ import type {
   ExportResult,
   FileTextResult,
   FileUploadResult,
+  GitHubProgressAnalysisRequest,
+  GitHubProgressAnalysisResult,
   HealthStatus,
   MissingInformationRequest,
   MissingInformationResult,
@@ -92,6 +94,17 @@ export async function extractTasks(
   payload: TaskExtractionRequest,
 ): Promise<ApiResponse<TaskItem[]>> {
   const response = await http.post<ApiResponse<TaskItem[]>>('/ai/extract-tasks', payload);
+  return response.data;
+}
+
+export async function analyzeGitHubProgress(
+  payload: GitHubProgressAnalysisRequest,
+): Promise<ApiResponse<GitHubProgressAnalysisResult>> {
+  const response = await http.post<ApiResponse<GitHubProgressAnalysisResult>>(
+    '/ai/analyze-github-progress',
+    payload,
+    { timeout: 90000 },
+  );
   return response.data;
 }
 
