@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ArrowLeft, ArrowRight, Check, MagicStick } from '@element-plus/icons-vue';
+import { ArrowLeft, ArrowRight, Check, MagicStick, Plus } from '@element-plus/icons-vue';
+import { isAxiosError } from 'axios';
 import { ElMessage } from 'element-plus';
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -7,9 +8,11 @@ import { useRoute, useRouter } from 'vue-router';
 import {
   checkMissingInfo,
   createReport,
+  createTemplate,
   extractTasks,
   generateReport,
   listTemplates,
+  uploadFile,
 } from '@/api/reportflow';
 import FileUploader from '@/components/FileUploader.vue';
 import ReportPreview from '@/components/ReportPreview.vue';
@@ -32,17 +35,65 @@ const templateId = ref<number | null>(
 );
 const templates = ref<Template[]>([]);
 
-const uploadedFile = ref<FileUploadResult | null>(null);
-const ocrText = ref('');
+const uploadedFiles = ref<FileUploadResult[]>([]);
+const ocrTexts = ref<string[]>([]);
+const ocrText = computed(() => ocrTexts.value.join('\n'));
 const ocrLoading = ref(false);
 const manualText = ref('');
-const sourceText = computed(() => manualText.value.trim());
+const sourceText = computed(() => [ocrText.value, manualText.value].filter(Boolean).join('\n'));
 
 const tasks = ref<TaskItem[]>([]);
 const extracting = ref(false);
 const missing = ref<MissingInformationResult | null>(null);
 const checking = ref(false);
 const answers = ref<Record<string, string>>({});
+// 证据文件：key 为 missing_field 名，value 为上传结果数组
+const evidenceFiles = ref<Record<string, FileUploadResult[]>>({});
+const evidenceUploading = ref(false);
+
+function isEvidenceField(field: string): boolean {
+  const keywords = ['evidence', 'attachment', 'image', 'photo', 'screenshot',
+    'file', 'upload', '证据', '附件', '截图', '图片', '文件', '照片', '凭证', '附件材料'];
+  const lower = field.toLowerCase();
+  return keywords.some((kw) => lower.includes(kw));
+}
+
+async function onEvidenceUpload(field: string, file: File) {
+  evidenceUploading.value = true;
+  try {
+    const result = await uploadFile(file);
+    if (result.code === 0 && result.data) {
+      const current = evidenceFiles.value[field] || [];
+      evidenceFiles.value = { ...evidenceFiles.value, [field]: [...current, result.data] };
+    }
+  } catch {
+    ElMessage.error(`${file.name} 上传失败`);
+  } finally {
+    evidenceUploading.value = false;
+  }
+}
+
+function pickEvidenceFile(field: string) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.multiple = true;
+  input.accept = '.png,.jpg,.jpeg,.pdf,.docx,.xlsx,.txt';
+  input.onchange = () => {
+    if (input.files) {
+      for (const file of input.files) void onEvidenceUpload(field, file);
+    }
+  };
+  input.click();
+}
+
+function removeEvidenceFile(field: string, index: number) {
+  const current = evidenceFiles.value[field] || [];
+  evidenceFiles.value = {
+    ...evidenceFiles.value,
+    [field]: current.filter((_, i) => i !== index),
+  };
+}
+
 const report = ref<ReportContent | null>(null);
 const generating = ref(false);
 const saving = ref(false);
@@ -60,21 +111,80 @@ const selectedTemplateFields = computed(() => {
 });
 
 onMounted(async () => {
+  await loadTemplateList();
+});
+
+async function loadTemplateList() {
   try {
     const response = await listTemplates();
     templates.value = response.data || [];
   } catch (error) {
     ElMessage.warning(error instanceof Error ? error.message : '模板列表加载失败');
   }
-});
+}
+
+/* ---------- 模板上传 ---------- */
+const MAX_TEMPLATE_BYTES = 20 * 1024 * 1024;
+const TEMPLATE_EXTENSIONS = ['.docx', '.xlsx', '.pdf'];
+const templateUploading = ref(false);
+
+function pickTemplateFile() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.docx,.xlsx,.pdf';
+  input.onchange = () => {
+    const file = input.files?.[0];
+    if (file) void handleTemplateUpload(file);
+  };
+  input.click();
+}
+
+async function handleTemplateUpload(file: File) {
+  const suffix = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+  if (!TEMPLATE_EXTENSIONS.includes(suffix)) {
+    ElMessage.error('模板仅支持 DOCX / XLSX / PDF');
+    return;
+  }
+  if (file.size > MAX_TEMPLATE_BYTES) {
+    ElMessage.error('模板文件不能超过 20MB');
+    return;
+  }
+
+  templateUploading.value = true;
+  try {
+    const uploadRes = await uploadFile(file);
+    if (uploadRes.code !== 0 || !uploadRes.data) {
+      ElMessage.error(uploadRes.message || '上传失败');
+      return;
+    }
+    const createRes = await createTemplate({
+      name: file.name.replace(/\.[^.]+$/, ''),
+      file_path: uploadRes.data.file_id,
+      template_type: reportType.value,
+    });
+    await loadTemplateList();
+    // 自动选中新上传的模板
+    templateId.value = createRes.data?.id ?? null;
+    ElMessage.success(`模板「${createRes.data?.name || file.name}」已添加并选中`);
+  } catch (error) {
+    const msg = isAxiosError(error)
+      ? (error.response?.data as { message?: string })?.message || error.message
+      : error instanceof Error
+        ? error.message
+        : '模板上传失败';
+    ElMessage.error(msg);
+  } finally {
+    templateUploading.value = false;
+  }
+}
 
 function onUploaded(file: FileUploadResult) {
-  uploadedFile.value = file;
+  uploadedFiles.value = [...uploadedFiles.value, file];
 }
 
 function onOCRResult(result: OCRResult) {
-  ocrText.value = result.text;
-  manualText.value = result.text;
+  ocrTexts.value = [...ocrTexts.value, result.text];
+  manualText.value = [manualText.value, result.text].filter(Boolean).join('\n');
 }
 
 function onOCRLoading(value: boolean) {
@@ -89,7 +199,8 @@ async function doExtract() {
       source_text: sourceText.value,
       report_type: reportType.value,
       context: {
-        uploaded_file: uploadedFile.value,
+        uploaded_files: uploadedFiles.value,
+        evidence_files: evidenceFiles.value,
         template_id: templateId.value,
         template_fields: selectedTemplateFields.value,
       },
@@ -112,7 +223,8 @@ async function doCheckMissing() {
       template_fields: selectedTemplateFields.value,
       source_data: {
         answers: answers.value,
-        uploaded_file: uploadedFile.value,
+        uploaded_files: uploadedFiles.value,
+        evidence_files: evidenceFiles.value,
       },
     });
     missing.value = response.data;
@@ -144,9 +256,10 @@ async function doGenerate() {
       style: style.value,
       source_data: {
         answers: answers.value,
-        uploaded_file: uploadedFile.value,
+        uploaded_files: uploadedFiles.value,
         ocr_text: ocrText.value,
         template_fields: selectedTemplateFields.value,
+        evidence_files: evidenceFiles.value,
       },
     });
     report.value = response.data;
@@ -175,7 +288,8 @@ async function saveAndEdit() {
       source_data: {
         content: report.value,
         answers: answers.value,
-        uploaded_file: uploadedFile.value,
+        uploaded_files: uploadedFiles.value,
+        evidence_files: evidenceFiles.value,
         template_fields: selectedTemplateFields.value,
       },
     });
@@ -248,10 +362,7 @@ async function saveAndEdit() {
             </el-button>
           </div>
         </template>
-        <div v-if="!tasks.length" class="step-empty">
-          <p>点击“AI 提取任务”从素材中自动识别，或手动添加。</p>
-        </div>
-        <TaskEditor v-else v-model:tasks="tasks" />
+        <TaskEditor v-model:tasks="tasks" title="任务列表" />
         <div class="step-actions between">
           <el-button :icon="ArrowLeft" @click="step = 0">上一步</el-button>
           <el-button
@@ -292,7 +403,31 @@ async function saveAndEdit() {
           />
           <div v-for="(question, index) in missing.questions" :key="question" class="field-row">
             <label class="field-label">{{ index + 1 }}. {{ question }}</label>
-            <el-input v-model="answers[missing.missing_fields[index]]" placeholder="请输入..." />
+            <!-- 证据类字段 → 上传按钮 -->
+            <template v-if="isEvidenceField(missing.missing_fields[index])">
+              <div class="evidence-area">
+                <el-button
+                  :icon="Plus"
+                  :loading="evidenceUploading"
+                  @click="pickEvidenceFile(missing.missing_fields[index])"
+                >
+                  添加证据文件
+                </el-button>
+                <div v-if="(evidenceFiles[missing.missing_fields[index]] || []).length" class="evidence-list">
+                  <el-tag
+                    v-for="(ef, ei) in evidenceFiles[missing.missing_fields[index]]"
+                    :key="ef.file_id"
+                    closable
+                    type="success"
+                    @close="removeEvidenceFile(missing.missing_fields[index], ei)"
+                  >
+                    {{ ef.original_name }}
+                  </el-tag>
+                </div>
+              </div>
+            </template>
+            <!-- 普通字段 → 输入框 -->
+            <el-input v-else v-model="answers[missing.missing_fields[index]]" placeholder="请输入..." />
           </div>
         </div>
 
@@ -321,14 +456,29 @@ async function saveAndEdit() {
           </el-col>
           <el-col :span="6">
             <label class="field-label">模板</label>
-            <el-select v-model="templateId" clearable style="width: 100%">
-              <el-option
-                v-for="template in templates"
-                :key="template.id"
-                :label="template.name"
-                :value="template.id"
-              />
-            </el-select>
+            <div class="template-picker">
+              <el-select
+                v-model="templateId"
+                clearable
+                placeholder="选择已有模板"
+                style="flex: 1"
+                @visible-change="(visible: boolean) => { if (visible) loadTemplateList(); }"
+              >
+                <el-option
+                  v-for="tpl in templates"
+                  :key="tpl.id"
+                  :label="tpl.name"
+                  :value="tpl.id"
+                />
+              </el-select>
+              <el-button
+                :icon="Plus"
+                :loading="templateUploading"
+                @click="pickTemplateFile"
+              >
+                添加模板
+              </el-button>
+            </div>
           </el-col>
         </el-row>
         <div class="step-actions between">
@@ -405,6 +555,23 @@ async function saveAndEdit() {
 
 .inline-actions {
   display: flex;
+  gap: 8px;
+}
+
+.template-picker {
+  display: flex;
+  gap: 8px;
+}
+
+.evidence-area {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.evidence-list {
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 </style>
